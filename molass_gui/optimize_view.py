@@ -121,7 +121,7 @@ class OptimizeView:
                                                axis_info=self._axis_info)
                             sv_hist = self._run_info.sv_history
                             sv_now = sv_hist[-1] if sv_hist else None
-                            _retitle_panels(self._ax_score, sv_now)
+                            _retitle_panels(self._ax_uv, self._ax_xr, self._ax_score, sv_now)
                         finally:
                             if lock:
                                 lock.release()
@@ -186,7 +186,9 @@ class OptimizeView:
 
 # ------------------------------------------------------------------
 
-def _retitle_panels(ax_score, sv):
+def _retitle_panels(ax_uv, ax_xr, ax_score, sv):
+    ax_uv.set_title("UV Decomposition", fontsize=16)
+    ax_xr.set_title("XR Decomposition", fontsize=16)
     if sv is not None:
         ax_score.set_title(f"Score Breakdown  (SV={sv:.1f})", fontsize=16)
     else:
