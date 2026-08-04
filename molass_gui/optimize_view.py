@@ -192,18 +192,22 @@ def _draw_curves(c, ax_uv, ax_xr, ax_xr_twin, ax_sv):
     # --- UV panel ---
     ax_uv.plot(c['uv_frames'], c['uv_data'], color='gray', lw=1.0, label='data')
     ax_uv.plot(c['uv_frames'], c['uv_model'], 'k-', lw=1.5, label='model')
-    for k, comp in enumerate(c['uv_components']):
+    for k, comp in enumerate(c['uv_components'][0:-1]):   # last row is baseline
         ax_uv.plot(c['uv_frames'], comp, color=_COLORS[k % len(_COLORS)],
                    lw=1.2, label=f'comp {k+1}')
+    ax_uv.plot(c['uv_frames'], c['uv_components'][-1], '--', color='gray',
+               lw=1.0, label='baseline')
     ax_uv.set_title('UV elution')
     ax_uv.legend(fontsize=7)
 
     # --- XR panel ---
     ax_xr.plot(c['xr_frames'], c['xr_data'], color='gray', lw=1.0, label='data')
     ax_xr.plot(c['xr_frames'], c['xr_model'], 'k-', lw=1.5, label='model')
-    for k, comp in enumerate(c['xr_components']):
+    for k, comp in enumerate(c['xr_components'][0:-1]):   # last row is baseline
         ax_xr.plot(c['xr_frames'], comp, color=_COLORS[k % len(_COLORS)],
                    lw=1.2, label=f'comp {k+1}')
+    ax_xr.plot(c['xr_frames'], c['xr_components'][-1], '--', color='gray',
+               lw=1.0, label='baseline')
     ax_xr.set_title('XR elution')
     ax_xr.legend(fontsize=7)
 
