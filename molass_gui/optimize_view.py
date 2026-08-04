@@ -24,6 +24,7 @@ class OptimizeView:
         self._parent = parent
         self._run_info = None
         self._stopped = False
+        self._niter = 0
         self._redraw_event = threading.Event()
 
     def show(self):
@@ -122,7 +123,8 @@ class OptimizeView:
                             if lock:
                                 lock.release()
                         # SV history in the bottom strip
-                        _draw_sv_history(self._ax_sv, self._run_info.sv_history)
+                        _draw_sv_history(self._ax_sv, self._run_info.sv_history,
+                                         self._niter)
                         self._redraw_event.set()
             except Exception:
                 pass
@@ -149,6 +151,8 @@ class OptimizeView:
             self._iter_var.set(
                 f"Iter: {n_callbacks}/{niter}" if niter else f"Iter: {n_callbacks}")
             self._time_var.set(_fmt_time_info(elapsed_s, n_callbacks, niter))
+            if niter:
+                self._niter = niter
 
             if phase == 'done':
                 self._status_var.set("Done.")
@@ -194,11 +198,19 @@ def _fmt_time_info(elapsed_s, n_done, n_total):
     return "  ".join(parts)
 
 
-def _draw_sv_history(ax, sv_hist):
+def _draw_sv_history(ax, sv_hist, niter=0):
     ax.cla()
-    if sv_hist is not None and len(sv_hist) > 0:
-        ax.plot(sv_hist, '-', lw=1.2, color='steelblue')
-        ax.set_ylim(bottom=0)
-        ax.set_xlabel("Accepted evaluations")
-        ax.set_ylabel("SV")
+    n = len(sv_hist) if sv_hist else 0
+    if n > 0:
+        xs = range(n)
+        ax.step(xs, sv_hist, where='post', lw=1.2, color='steelblue')
+        ax.set_ylim(bottom=max(0, min(sv_hist) - 5), top=105)
+        # shade the remaining region
+        if niter > n:
+            ax.axvspan(n - 1, niter, alpha=0.06, color='grey')
+            ax.axvline(n - 1, color='steelblue', lw=0.8, ls='--', alpha=0.6)
+    if niter > 0:
+        ax.set_xlim(0, niter)
+    ax.set_xlabel("BH hop")
+    ax.set_ylabel("SV")
     ax.set_title("SV history")
