@@ -1,4 +1,5 @@
 """OptimizeView — four-panel live monitor for rigorous optimization."""
+import os
 import threading
 import time
 import tkinter as tk
@@ -43,6 +44,11 @@ class OptimizeView:
             side=tk.LEFT, padx=16)
         self._n_var = tk.StringVar(value="0 evals")
         ttk.Label(hdr, textvariable=self._n_var).pack(side=tk.LEFT)
+        self._iter_var = tk.StringVar(value="Iter: —")
+        ttk.Label(hdr, textvariable=self._iter_var).pack(side=tk.LEFT, padx=12)
+        self._time_var = tk.StringVar(value="")
+        ttk.Label(hdr, textvariable=self._time_var, foreground="#555").pack(
+            side=tk.LEFT, padx=4)
         self._stop_btn = ttk.Button(hdr, text="Terminate", command=self._stop,
                                     state="disabled")
         self._stop_btn.pack(side=tk.RIGHT, padx=8)
@@ -129,12 +135,21 @@ class OptimizeView:
             return
         try:
             status = self._run_info.live_status()
-            phase   = status.get('phase', '?')
-            best_sv = status.get('best_sv')
-            n_evals = status.get('n_evals', 0)
+            phase      = status.get('phase', '?')
+            best_sv    = status.get('best_sv')
+            n_evals    = status.get('n_evals', 0)
+            n_callbacks = status.get('n_callbacks') or 0
+            elapsed_s  = status.get('elapsed_s') or 0.0
+            manifest   = status.get('manifest') or {}
+            niter      = manifest.get('niter', 0)
+
             self._n_var.set(f"{n_evals} evals")
             if best_sv is not None:
                 self._sv_var.set(f"SV: {best_sv:.2f}")
+            self._iter_var.set(
+                f"Iter: {n_callbacks}/{niter}" if niter else f"Iter: {n_callbacks}")
+            self._time_var.set(_fmt_time_info(elapsed_s, n_callbacks, niter))
+
             if phase == 'done':
                 self._status_var.set("Done.")
                 self._stop_btn.state(["disabled"])
@@ -163,6 +178,21 @@ class OptimizeView:
 
 
 # ------------------------------------------------------------------
+
+def _fmt_duration(seconds):
+    h, rem = divmod(int(seconds), 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+
+def _fmt_time_info(elapsed_s, n_done, n_total):
+    parts = [f"Elapsed: {_fmt_duration(elapsed_s)}"]
+    if n_done > 0 and n_total > 0 and elapsed_s > 0:
+        rate = elapsed_s / n_done          # seconds per BH hop
+        remaining = (n_total - n_done) * rate
+        parts.append(f"ETA: ~{_fmt_duration(remaining)}")
+    return "  ".join(parts)
+
 
 def _draw_sv_history(ax, sv_hist):
     ax.cla()
