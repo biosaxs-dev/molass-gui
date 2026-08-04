@@ -119,6 +119,9 @@ class OptimizeView:
                             # UV, XR and score breakdown drawn by legacy code
                             opt.objective_func(params, plot=True,
                                                axis_info=self._axis_info)
+                            sv_hist = self._run_info.sv_history
+                            sv_now = sv_hist[-1] if sv_hist else None
+                            _retitle_panels(self._ax_score, sv_now)
                         finally:
                             if lock:
                                 lock.release()
@@ -182,6 +185,13 @@ class OptimizeView:
 
 
 # ------------------------------------------------------------------
+
+def _retitle_panels(ax_score, sv):
+    if sv is not None:
+        ax_score.set_title(f"Score Breakdown  (SV={sv:.1f})", fontsize=16)
+    else:
+        ax_score.set_title("Score Breakdown", fontsize=16)
+
 
 def _fmt_duration(seconds):
     h, rem = divmod(int(seconds), 3600)
