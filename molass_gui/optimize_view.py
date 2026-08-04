@@ -67,6 +67,17 @@ class OptimizeView:
         self._axis_info = (self._fig,
                            (self._ax_uv, self._ax_xr, self._ax_score, self._ax_xr_twin))
 
+        # Draw initial state (init_params) synchronously on the main thread
+        # so panels are never blank when the window first appears.
+        try:
+            opt0 = self._score.optimizer
+            opt0.objective_func(
+                self._score.init_params, plot=True, axis_info=self._axis_info)
+            _retitle_panels(self._ax_uv, self._ax_xr, self._ax_score, self._score.sv)
+            _draw_sv_history(self._ax_sv, [], 0)
+        except Exception:
+            pass
+
         canvas = FigureCanvasTkAgg(self._fig, master=win)
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
