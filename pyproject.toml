@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "molass_gui"
+version = "0.1.0"
+
+dependencies = [
+  "molass>=1.0.3",
+  "molass_legacy>=1.6.0",
+]
+
+requires-python = ">=3.9,<3.15"
+
+authors = [
+  {name = "Molass Community"},
+]
+
+maintainers = [
+  {name = "Molass Community"}
+]
+
+description = "Tkinter GUI for Molass — initial estimate workflow"
+readme = "README.md"
+license = { text = "GNU General Public License v3.0" }
+
+keywords = ["SEC-SAXS"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+]
+
+[project.scripts]
+molass-gui = "molass_gui.app:main"
+
+[project.urls]
+Repository = "https://github.com/biosaxs-dev/molass-gui"

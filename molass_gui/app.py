@@ -1,8 +1,13 @@
-"""Thin launcher — allows `py app.py` during development."""
-from molass_gui.app import main
+"""
+molass-gui — Option A prototype: folder picker → InitialEstimator → score display.
 
-if __name__ == "__main__":
-    main()
+Parallels molass-researcher/experiments/34_ssd_rigorous_gui/34e_standard_way.ipynb:
+  SSD(folder) → trimmed_copy → corrected_copy → quick_decomposition
+  → decomposition.score(trimmed_ssd) → score.plot()
+"""
+import threading
+import tkinter as tk
+from tkinter import ttk, filedialog
 
 _DEFAULT_FOLDER = r"C:\Users\takahashi\PyTools\Data\20230705"
 
@@ -49,7 +54,7 @@ class App(tk.Tk):
 
         nc = self._nc_var.get()
         self._btn.state(["disabled"])
-        self._status_var.set("Loading data\u2026")
+        self._status_var.set("Loading data…")
 
         def worker():
             try:
