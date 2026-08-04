@@ -18,6 +18,10 @@ class ScoreView:
         win.title(title)
 
         plot_result = self._score.plot(title=title)
+        ax_uv, ax_xr, ax_score = plot_result.axes[:3]
+        ax_uv.set_title("UV Decomposition", fontsize=16)
+        ax_xr.set_title("XR Decomposition", fontsize=16)
+        ax_score.set_title(f"Score Breakdown  (SV={self._score.sv:.1f})", fontsize=16)
         canvas = FigureCanvasTkAgg(plot_result.fig, master=win)
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
