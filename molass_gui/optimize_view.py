@@ -101,7 +101,12 @@ class OptimizeView:
 
     def _watch_loop(self):
         """Background: draw all panels via objective_func, then signal UI."""
+        first = True
         while not self._stopped:
+            if first:
+                first = False
+            else:
+                time.sleep(3.0)
             try:
                 opt = self._run_info.optimizer
                 params = self._run_info.best_params
@@ -131,7 +136,6 @@ class OptimizeView:
                         self._redraw_event.set()
             except Exception:
                 pass
-            time.sleep(3.0)
 
     def _ui_poll(self):
         """Main-thread: update labels; flush canvas when watch thread is done."""
