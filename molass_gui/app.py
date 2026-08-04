@@ -70,7 +70,8 @@ class App(tk.Tk):
                 def on_main():
                     self._btn.state(["!disabled"])
                     self._status_var.set("Ready.")
-                    est.show(parent=self)
+                    from molass_gui.estimator_view import EstimatorView
+                    EstimatorView(est, parent=self).show()
 
                 self.after(0, on_main)
 
