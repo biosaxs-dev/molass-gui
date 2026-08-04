@@ -1,20 +1,19 @@
-"""OptimizeView — three-panel live monitor for rigorous optimization."""
-import queue
+"""OptimizeView — four-panel live monitor for rigorous optimization."""
 import threading
 import time
 import tkinter as tk
 from tkinter import ttk
-import numpy as np
 
 
 class OptimizeView:
     """
-    Three-panel live dashboard: UV elution | XR elution | SV history.
+    Four-panel live dashboard:
+      Top row:    UV elution | XR elution | Score breakdown
+      Bottom row: SV history (full width)
 
     Watch thread acquires optimizer._objective_lock, calls
-    objective_func(params, return_lrf_info=True) every ~3 s, puts numpy
-    arrays in a queue.  The Tkinter after() poll drains the queue and does
-    all matplotlib drawing on the main thread (safe with FigureCanvasTkAgg).
+    objective_func(params, plot=True) every ~3 s to draw UV/XR/score panels,
+    then draws SV history.  Sets _redraw_event; main thread calls canvas.draw().
     """
 
     def __init__(self, score, estimator, analysis_folder, parent=None):
@@ -24,16 +23,17 @@ class OptimizeView:
         self._parent = parent
         self._run_info = None
         self._stopped = False
-        self._curve_q = queue.Queue(maxsize=1)
+        self._redraw_event = threading.Event()
 
     def show(self):
         import matplotlib.pyplot as plt
+        import matplotlib.gridspec as gridspec
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
         win = tk.Toplevel(self._parent)
         win.title("Rigorous Optimization")
 
-        # Header: status / SV / eval count / Terminate
+        # Header
         hdr = ttk.Frame(win, padding=(8, 4))
         hdr.pack(fill=tk.X)
         self._status_var = tk.StringVar(value="Starting\u2026")
@@ -47,11 +47,18 @@ class OptimizeView:
                                     state="disabled")
         self._stop_btn.pack(side=tk.RIGHT, padx=8)
 
-        # 3-panel figure
-        self._fig, axes = plt.subplots(ncols=3, figsize=(18, 4.5))
-        self._ax_uv, self._ax_xr, self._ax_sv = axes
+        # Figure: top 3 panels + bottom SV strip
+        self._fig = plt.figure(figsize=(18, 6.5))
+        gs = gridspec.GridSpec(2, 3, figure=self._fig,
+                               height_ratios=[4, 1.5], hspace=0.45)
+        self._ax_uv    = self._fig.add_subplot(gs[0, 0])
+        self._ax_xr    = self._fig.add_subplot(gs[0, 1])
+        self._ax_score = self._fig.add_subplot(gs[0, 2])
         self._ax_xr_twin = self._ax_xr.twinx()
         self._ax_xr_twin.grid(False)
+        self._ax_sv    = self._fig.add_subplot(gs[1, :])   # full-width SV strip
+        self._axis_info = (self._fig,
+                           (self._ax_uv, self._ax_xr, self._ax_score, self._ax_xr_twin))
 
         canvas = FigureCanvasTkAgg(self._fig, master=win)
         canvas.draw()
@@ -86,7 +93,7 @@ class OptimizeView:
         self._win.after(500, self._ui_poll)
 
     def _watch_loop(self):
-        """Background: compute curves with lock, put latest in queue."""
+        """Background: draw all panels via objective_func, then signal UI."""
         while not self._stopped:
             try:
                 opt = self._run_info.optimizer
@@ -98,30 +105,31 @@ class OptimizeView:
                     acquired = lock.acquire(timeout=1.5) if lock else True
                     if acquired:
                         try:
-                            lrf_info = opt.objective_func(params, return_lrf_info=True)
+                            for ax in (self._ax_uv, self._ax_xr, self._ax_score,
+                                       self._ax_xr_twin, self._ax_sv):
+                                ax.cla()
+                            self._ax_xr_twin.grid(False)
+                            # UV, XR and score breakdown drawn by legacy code
+                            opt.objective_func(params, plot=True,
+                                               axis_info=self._axis_info)
                         finally:
                             if lock:
                                 lock.release()
-                        if lrf_info is not None:
-                            # read sv_history from disk (fast)
-                            sv_hist = self._run_info.sv_history
-                            curves = _extract_curves(lrf_info, sv_hist)
-                            try:
-                                self._curve_q.put_nowait(curves)
-                            except queue.Full:
-                                pass
+                        # SV history in the bottom strip
+                        _draw_sv_history(self._ax_sv, self._run_info.sv_history)
+                        self._redraw_event.set()
             except Exception:
                 pass
             time.sleep(3.0)
 
     def _ui_poll(self):
-        """Main-thread: update labels and redraw from latest queue snapshot."""
+        """Main-thread: update labels; flush canvas when watch thread is done."""
         if self._run_info is None:
             self._win.after(500, self._ui_poll)
             return
         try:
             status = self._run_info.live_status()
-            phase = status.get('phase', '?')
+            phase   = status.get('phase', '?')
             best_sv = status.get('best_sv')
             n_evals = status.get('n_evals', 0)
             self._n_var.set(f"{n_evals} evals")
@@ -136,15 +144,9 @@ class OptimizeView:
         except Exception:
             pass
 
-        # Redraw if watch thread has new data
-        try:
-            curves = self._curve_q.get_nowait()
-            _draw_curves(curves, self._ax_uv, self._ax_xr, self._ax_xr_twin,
-                         self._ax_sv)
-            self._fig.tight_layout()
+        if self._redraw_event.is_set():
+            self._redraw_event.clear()
             self._canvas.draw()
-        except queue.Empty:
-            pass
 
         if not self._stopped:
             self._win.after(500, self._ui_poll)
@@ -161,64 +163,12 @@ class OptimizeView:
 
 
 # ------------------------------------------------------------------
-# Helpers (module-level to keep the class small)
-# ------------------------------------------------------------------
 
-def _extract_curves(lrf_info, sv_hist):
-    """Pull numpy arrays out of lrf_info."""
-    return {
-        'xr_frames':     lrf_info.x,
-        'xr_data':       lrf_info.y,
-        'xr_model':      lrf_info.xr_ty,
-        'xr_components': lrf_info.scaled_xr_cy_array,
-        'uv_frames':     lrf_info.uv_x,
-        'uv_data':       lrf_info.uv_y,
-        'uv_model':      lrf_info.uv_ty,
-        'uv_components': lrf_info.scaled_uv_cy_array,
-        'sv_hist':       sv_hist,
-    }
-
-
-_COLORS = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple',
-           'tab:brown']
-
-
-def _draw_curves(c, ax_uv, ax_xr, ax_xr_twin, ax_sv):
-    """Draw all three panels from a curves dict.  Called on the main thread."""
-    for ax in (ax_uv, ax_xr, ax_xr_twin, ax_sv):
-        ax.cla()
-    ax_xr_twin.grid(False)
-
-    # --- UV panel ---
-    ax_uv.plot(c['uv_frames'], c['uv_data'], color='gray', lw=1.0, label='data')
-    ax_uv.plot(c['uv_frames'], c['uv_model'], 'k-', lw=1.5, label='model')
-    for k, comp in enumerate(c['uv_components'][0:-1]):   # last row is baseline
-        ax_uv.plot(c['uv_frames'], comp, color=_COLORS[k % len(_COLORS)],
-                   lw=1.2, label=f'comp {k+1}')
-    ax_uv.plot(c['uv_frames'], c['uv_components'][-1], '--', color='gray',
-               lw=1.0, label='baseline')
-    ax_uv.set_title('UV elution')
-    ax_uv.legend(fontsize=7)
-
-    # --- XR panel ---
-    ax_xr.plot(c['xr_frames'], c['xr_data'], color='gray', lw=1.0, label='data')
-    ax_xr.plot(c['xr_frames'], c['xr_model'], 'k-', lw=1.5, label='model')
-    for k, comp in enumerate(c['xr_components'][0:-1]):   # last row is baseline
-        ax_xr.plot(c['xr_frames'], comp, color=_COLORS[k % len(_COLORS)],
-                   lw=1.2, label=f'comp {k+1}')
-    ax_xr.plot(c['xr_frames'], c['xr_components'][-1], '--', color='gray',
-               lw=1.0, label='baseline')
-    ax_xr.set_title('XR elution')
-    ax_xr.legend(fontsize=7)
-
-    # --- SV history panel ---
-    sv_hist = c.get('sv_hist')
+def _draw_sv_history(ax, sv_hist):
+    ax.cla()
     if sv_hist is not None and len(sv_hist) > 0:
-        ax_sv.plot(sv_hist, '-', lw=1.2, color='steelblue')
-        ax_sv.set_ylim(bottom=0)
-        ax_sv.set_title('SV history')
-        ax_sv.set_xlabel('Accepted evaluations')
-        ax_sv.set_ylabel('SV')
-    else:
-        ax_sv.set_title('SV history (waiting\u2026)')
-
+        ax.plot(sv_hist, '-', lw=1.2, color='steelblue')
+        ax.set_ylim(bottom=0)
+        ax.set_xlabel("Accepted evaluations")
+        ax.set_ylabel("SV")
+    ax.set_title("SV history")
