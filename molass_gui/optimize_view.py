@@ -225,13 +225,7 @@ class OptimizeView:
         self._stopped = True
         if self._run_info is not None:
             try:
-                self._run_info.request_stop()      # in_process=True: cooperative stop
-            except Exception:
-                pass
-            try:
-                p = getattr(self._run_info, '_subprocess_process', None)
-                if p is not None:
-                    p.terminate()                  # subprocess mode: SIGTERM
+                self._run_info.stop()  # handles both in_process and subprocess
             except Exception:
                 pass
         self._status_var.set("Terminating\u2026")
