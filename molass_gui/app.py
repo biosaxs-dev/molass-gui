@@ -34,12 +34,17 @@ class App(tk.Tk):
         ttk.Spinbox(f, from_=1, to=6, textvariable=self._nc_var, width=5).grid(
             row=1, column=1, sticky=tk.W, padx=6)
 
+        self._subprocess_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(f, text="Use subprocess (faster for long runs)",
+                        variable=self._subprocess_var).grid(
+            row=2, column=0, columnspan=3, sticky=tk.W, pady=4)
+
         self._btn = ttk.Button(f, text="Estimate", command=self._run)
-        self._btn.grid(row=2, column=0, columnspan=3, pady=10)
+        self._btn.grid(row=3, column=0, columnspan=3, pady=10)
 
         self._status_var = tk.StringVar(value="Ready.")
         ttk.Label(f, textvariable=self._status_var, foreground="gray").grid(
-            row=3, column=0, columnspan=3, sticky=tk.W)
+            row=4, column=0, columnspan=3, sticky=tk.W)
 
     def _browse(self):
         d = filedialog.askdirectory(title="Select data folder")
@@ -53,6 +58,7 @@ class App(tk.Tk):
             return
 
         nc = self._nc_var.get()
+        use_subprocess = self._subprocess_var.get()
         self._btn.state(["disabled"])
         self._status_var.set("Loading data…")
 
@@ -64,8 +70,19 @@ class App(tk.Tk):
                 corrected = trimmed.corrected_copy()
                 decomp = corrected.quick_decomposition(num_components=nc)
 
+                # Build pipeline recipe for subprocess reconstruction (Option E)
+                pipeline_recipe = {
+                    'num_components': nc,
+                    'decomp_params': {},   # No special params (default path)
+                    'trim_params': {},     # Default trimming
+                    'baseline_params': {}, # Default baseline
+                }
+
                 from molass.Rigorous.InitialEstimator import InitialEstimator
                 est = InitialEstimator(decomp, trimmed_ssd=trimmed)
+                # Store context for optimize_view
+                est._use_subprocess = use_subprocess
+                est._pipeline_recipe = pipeline_recipe
 
                 def on_main():
                     self._btn.state(["!disabled"])

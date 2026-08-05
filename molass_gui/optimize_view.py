@@ -1,5 +1,7 @@
 """OptimizeView — four-panel live monitor for rigorous optimization."""
 import os
+import sys
+import traceback
 import threading
 import time
 import tkinter as tk
@@ -91,18 +93,33 @@ class OptimizeView:
 
     def _launch(self):
         try:
+            use_subprocess = getattr(self._est, '_use_subprocess', False)
+            pipeline_recipe = getattr(self._est, '_pipeline_recipe', None)
+            
             run_info = self._est.decomposition.optimize_rigorously(
                 trimmed_ssd=self._est.trimmed_ssd,
-                in_process=True,
+                in_process=not use_subprocess,  # Inverted: checkbox=True → subprocess mode
                 async_=True,
                 monitor=False,
                 analysis_folder=self._analysis_folder,
+                pipeline_recipe=pipeline_recipe,
             )
             self._run_info = run_info
             self._win.after(0, self._on_started)
         except Exception as exc:
-            msg = str(exc)
-            self._win.after(0, lambda: self._status_var.set(f"Error: {msg}"))
+            tb = traceback.format_exc()
+            # Always write full traceback to a log file next to the analysis folder.
+            log_path = os.path.join(self._analysis_folder, 'molass_gui_error.log')
+            try:
+                os.makedirs(self._analysis_folder, exist_ok=True)
+                with open(log_path, 'w') as _f:
+                    _f.write(tb)
+            except Exception:
+                pass
+            print(tb, file=sys.stderr)
+            short = str(exc).split('\n')[0][:120]
+            self._win.after(0, lambda: self._status_var.set(
+                f"Error: {short}  — see {log_path}"))
 
     def _on_started(self):
         self._stop_btn.state(["!disabled"])
@@ -111,7 +128,7 @@ class OptimizeView:
         self._win.after(500, self._ui_poll)
 
     def _watch_loop(self):
-        """Background: draw all panels via objective_func, then signal UI."""
+        """Background: draw UV/XR/score panels via objective_func every ~3 s."""
         first = True
         while not self._stopped:
             if first:
@@ -129,10 +146,9 @@ class OptimizeView:
                     if acquired:
                         try:
                             for ax in (self._ax_uv, self._ax_xr, self._ax_score,
-                                       self._ax_xr_twin, self._ax_sv):
+                                       self._ax_xr_twin):
                                 ax.cla()
                             self._ax_xr_twin.grid(False)
-                            # UV, XR and score breakdown drawn by legacy code
                             opt.objective_func(params, plot=True,
                                                axis_info=self._axis_info)
                             sv_hist = self._run_info.sv_history
@@ -141,15 +157,14 @@ class OptimizeView:
                         finally:
                             if lock:
                                 lock.release()
-                        # SV history in the bottom strip
-                        _draw_sv_history(self._ax_sv, self._run_info.sv_history,
-                                         self._niter)
                         self._redraw_event.set()
             except Exception:
                 pass
 
     def _ui_poll(self):
         """Main-thread: update labels; flush canvas when watch thread is done."""
+        if self._stopped:
+            return
         if self._run_info is None:
             self._win.after(500, self._ui_poll)
             return
@@ -177,13 +192,31 @@ class OptimizeView:
                 self._stop_btn.state(["disabled"])
                 self._stopped = True
             else:
-                self._status_var.set(f"Phase: {phase}")
+                # Detect subprocess crash: process dead but no callback data.
+                p = getattr(self._run_info, '_subprocess_process', None)
+                if p is not None and p.poll() is not None and p.poll() != 0 and not n_callbacks:
+                    stderr_path = os.path.join(
+                        self._run_info.work_folder or '', 'optimizer_stderr.txt')
+                    self._status_var.set(
+                        f"Subprocess error (exit {p.poll()}) — see {stderr_path}")
+                    self._stop_btn.state(["disabled"])
+                    self._stopped = True
+                else:
+                    self._status_var.set(f"Phase: {phase}")
+
+            # SV strip drawn every tick regardless of watch_loop status.
+            try:
+                sv_hist = self._run_info.sv_history
+                _draw_sv_history(self._ax_sv, sv_hist, self._niter)
+            except Exception:
+                pass
         except Exception:
             pass
 
-        if self._redraw_event.is_set():
-            self._redraw_event.clear()
-            self._canvas.draw()
+        # TODO perf: skip draw when sv_hist length unchanged and _redraw_event not set.
+        # TODO perf: use canvas.blit(ax_sv.bbox) for SV strip instead of full canvas.draw().
+        self._redraw_event.clear()
+        self._canvas.draw()
 
         if not self._stopped:
             self._win.after(500, self._ui_poll)
@@ -192,11 +225,27 @@ class OptimizeView:
         self._stopped = True
         if self._run_info is not None:
             try:
-                self._run_info.stop()
+                self._run_info.request_stop()      # in_process=True: cooperative stop
+            except Exception:
+                pass
+            try:
+                p = getattr(self._run_info, '_subprocess_process', None)
+                if p is not None:
+                    p.terminate()                  # subprocess mode: SIGTERM
             except Exception:
                 pass
         self._status_var.set("Terminating\u2026")
         self._stop_btn.state(["disabled"])
+        # Poll until process exits, then show Terminated.
+        def _wait_dead():
+            ri = self._run_info
+            if ri is not None:
+                for _ in range(60):   # up to 30 s
+                    time.sleep(0.5)
+                    if not ri.is_alive:
+                        break
+            self._win.after(0, lambda: self._status_var.set("Terminated."))
+        threading.Thread(target=_wait_dead, daemon=True).start()
 
 
 # ------------------------------------------------------------------
