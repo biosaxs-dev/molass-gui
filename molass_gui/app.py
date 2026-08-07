@@ -1,10 +1,4 @@
-"""
-molass-gui — Option A prototype: folder picker → InitialEstimator → score display.
-
-Parallels molass-researcher/experiments/34_ssd_rigorous_gui/34e_standard_way.ipynb:
-  SSD(folder) → trimmed_copy → corrected_copy → quick_decomposition
-  → decomposition.score(trimmed_ssd) → score.plot()
-"""
+"""molass-gui — Phase 1: data folder input."""
 import threading
 import tkinter as tk
 from tkinter import ttk, filedialog
@@ -15,9 +9,15 @@ _DEFAULT_FOLDER = r"C:\Users\takahashi\PyTools\Data\20230705"
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Molass — Initial Estimate")
+        self.title("Molass")
         self.resizable(False, False)
         self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self._quit)
+
+    def _quit(self):
+        import sys
+        self.destroy()
+        sys.exit(0)
 
     def _build_ui(self):
         f = ttk.Frame(self, padding=16)
@@ -29,22 +29,12 @@ class App(tk.Tk):
             row=0, column=1, padx=6)
         ttk.Button(f, text="Browse…", command=self._browse).grid(row=0, column=2)
 
-        ttk.Label(f, text="Components:").grid(row=1, column=0, sticky=tk.W, pady=4)
-        self._nc_var = tk.IntVar(value=3)
-        ttk.Spinbox(f, from_=1, to=6, textvariable=self._nc_var, width=5).grid(
-            row=1, column=1, sticky=tk.W, padx=6)
-
-        self._subprocess_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(f, text="Use subprocess (faster for long runs)",
-                        variable=self._subprocess_var).grid(
-            row=2, column=0, columnspan=3, sticky=tk.W, pady=4)
-
-        self._btn = ttk.Button(f, text="Estimate", command=self._run)
-        self._btn.grid(row=3, column=0, columnspan=3, pady=10)
+        self._btn = ttk.Button(f, text="Load", command=self._run)
+        self._btn.grid(row=1, column=0, columnspan=3, pady=10)
 
         self._status_var = tk.StringVar(value="Ready.")
         ttk.Label(f, textvariable=self._status_var, foreground="gray").grid(
-            row=4, column=0, columnspan=3, sticky=tk.W)
+            row=2, column=0, columnspan=3, sticky=tk.W)
 
     def _browse(self):
         d = filedialog.askdirectory(title="Select data folder")
@@ -57,38 +47,20 @@ class App(tk.Tk):
             self._status_var.set("Please select a data folder first.")
             return
 
-        nc = self._nc_var.get()
-        use_subprocess = self._subprocess_var.get()
         self._btn.state(["disabled"])
-        self._status_var.set("Loading data…")
+        self._status_var.set("Loading…")
 
         def worker():
             try:
                 from molass.DataObjects import SecSaxsData as SSD
                 ssd = SSD(folder)
                 trimmed = ssd.trimmed_copy()
-                corrected = trimmed.corrected_copy()
-                decomp = corrected.quick_decomposition(num_components=nc)
-
-                # Build pipeline recipe for subprocess reconstruction (Option E)
-                pipeline_recipe = {
-                    'num_components': nc,
-                    'decomp_params': {},   # No special params (default path)
-                    'trim_params': {},     # Default trimming
-                    'baseline_params': {}, # Default baseline
-                }
-
-                from molass.Rigorous.InitialEstimator import InitialEstimator
-                est = InitialEstimator(decomp, trimmed_ssd=trimmed)
-                # Store context for optimize_view
-                est._use_subprocess = use_subprocess
-                est._pipeline_recipe = pipeline_recipe
 
                 def on_main():
                     self._btn.state(["!disabled"])
                     self._status_var.set("Ready.")
-                    from molass_gui.estimator_view import EstimatorView
-                    EstimatorView(est, parent=self).show()
+                    from molass_gui.naive_view import NaiveView
+                    NaiveView(ssd, trimmed, parent=self).show()
 
                 self.after(0, on_main)
 
