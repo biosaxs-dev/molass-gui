@@ -5,16 +5,22 @@ from tkinter import ttk
 
 
 class NaiveView:
-    def __init__(self, ssd, trimmed, parent=None):
+    def __init__(self, ssd, trimmed, parent=None, app_root=None, session_tag=None):
         self._ssd = ssd
         self._trimmed = trimmed
         self._parent = parent
+        self._app_root = app_root
+        self._session_tag = session_tag
 
     def show(self):
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
         win = tk.Toplevel(self._parent)
-        win.title("Naive View")
+        title = "Naive View"
+        if self._session_tag:
+            title += f"  [{self._session_tag}]"
+        win.title(title)
+        win.protocol("WM_DELETE_WINDOW", self._app_root.close_session)
 
         # Header: num_components + Decompose button + status
         hdr = ttk.Frame(win, padding=(8, 4))
@@ -23,7 +29,8 @@ class NaiveView:
         self._nc_var = tk.IntVar(value=3)
         ttk.Spinbox(hdr, from_=1, to=6, textvariable=self._nc_var, width=5).pack(
             side=tk.LEFT, padx=6)
-        self._decomp_btn = ttk.Button(hdr, text="Decompose", command=self._decompose)
+        self._decomp_btn = ttk.Button(hdr, text="Decompose", command=self._decompose,
+                                     style="Accent.TButton")
         self._decomp_btn.pack(side=tk.LEFT, padx=12)
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(side=tk.LEFT)
@@ -50,7 +57,8 @@ class NaiveView:
                     self._decomp_btn.state(["!disabled"])
                     self._status_var.set("")
                     from molass_gui.quick_view import QuickView
-                    QuickView(decomp, self._trimmed, nc, parent=self._win).show()
+                    QuickView(decomp, self._trimmed, nc, parent=self._win,
+                              app_root=self._app_root, session_tag=self._session_tag).show()
 
                 self._win.after(0, on_main)
             except Exception as exc:

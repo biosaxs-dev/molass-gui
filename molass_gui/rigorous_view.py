@@ -13,7 +13,8 @@ from tkinter import ttk
 
 
 class RigorousView:
-    def __init__(self, decomp, trimmed, est_kwargs, analysis_folder, parent=None):
+    def __init__(self, decomp, trimmed, est_kwargs, analysis_folder, parent=None,
+                 app_root=None, session_tag=None):
         """
         Parameters
         ----------
@@ -26,17 +27,24 @@ class RigorousView:
         analysis_folder : str
             Output folder for optimization results.
         parent : tk widget or None
+        app_root : App or None
+            Root window; its close_session() tears down the whole session.
+        session_tag : str or None
+            Data folder name, shown in the title to distinguish concurrent sessions.
         """
         self._decomp = decomp
         self._trimmed = trimmed
         self._est_kwargs = est_kwargs
         self._analysis_folder = analysis_folder
         self._parent = parent
+        self._app_root = app_root
+        self._session_tag = session_tag
         self._decomp_for_opt = None
         self._score = None
         self._run_info = None
         self._stopped = False
         self._niter = 0
+        self._method = 'BH'
         self._last_sv_len = 0
         self._redraw_event = threading.Event()
 
@@ -49,8 +57,15 @@ class RigorousView:
         recipe = (self._est_kwargs.get('pipeline_recipe') or {})
         model  = recipe.get('model', 'egh').upper()
         method = recipe.get('method', 'bh').upper()
+        self._method = method
         proc   = 'subprocess' if self._est_kwargs.get('use_subprocess') else 'in-process'
-        win.title(f"Rigorous Optimization \u2014 {model} | {method} | {proc}")
+        title = f"Rigorous Optimization — {model} | {method} | {proc}"
+        if self._session_tag:
+            title += f"  [{self._session_tag}]"
+        win.title(title)
+        win.protocol("WM_DELETE_WINDOW", self._app_root.close_session)
+        self._app_root.register_cleanup(
+            lambda: self._run_info.stop() if self._run_info is not None else None)
 
         # Prep phase header (hidden after prep completes)
         self._prep_frame = ttk.Frame(win, padding=(8, 2))
@@ -76,19 +91,20 @@ class RigorousView:
         self._time_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._time_var, foreground="#555").pack(side=tk.LEFT, padx=4)
         self._action_btn = ttk.Button(hdr, text="Terminate", command=self._stop,
-                                      state='disabled')
+                                      state='disabled', style="Danger.TButton")
         self._action_btn.pack(side=tk.RIGHT, padx=8)
 
-        # 4-panel figure: top 3 panels + bottom SV strip
-        self._fig = plt.figure(figsize=(18, 6.5))
-        gs = gridspec.GridSpec(2, 3, figure=self._fig,
-                               height_ratios=[4, 1.5], hspace=0.45)
+        # 5-panel figure: top 3 panels + Function SV row + Rg Values row
+        self._fig = plt.figure(figsize=(18, 8.0))
+        gs = gridspec.GridSpec(3, 3, figure=self._fig,
+                               height_ratios=[4, 1.5, 1.5], hspace=0.55)
         self._ax_uv      = self._fig.add_subplot(gs[0, 0])
         self._ax_xr      = self._fig.add_subplot(gs[0, 1])
         self._ax_score   = self._fig.add_subplot(gs[0, 2])
         self._ax_xr_twin = self._ax_xr.twinx()
         self._ax_xr_twin.grid(False)
         self._ax_sv      = self._fig.add_subplot(gs[1, :])
+        self._ax_rg      = self._fig.add_subplot(gs[2, :])
         self._axis_info  = (self._fig,
                             (self._ax_uv, self._ax_xr, self._ax_score, self._ax_xr_twin))
 
@@ -144,6 +160,7 @@ class RigorousView:
             opt.objective_func(score.init_params, plot=True, axis_info=self._axis_info)
             _retitle_panels(self._ax_uv, self._ax_xr, self._ax_score, score.sv)
             _draw_sv_history(self._ax_sv, [], 0)
+            _draw_rg_history(self._ax_rg, [], 0)
         except Exception:
             pass
         self._canvas.draw()
@@ -244,15 +261,17 @@ class RigorousView:
             elapsed_s   = status.get('elapsed_s') or 0.0
             manifest    = status.get('manifest') or {}
             niter       = manifest.get('niter', 0)
+            n_params    = len(self._run_info.init_params) if self._run_info.init_params is not None else 0
+            expected    = _expected_total_units(self._method, niter, n_params)
 
             self._n_var.set(f"{n_evals} evals")
             if best_sv is not None:
                 self._sv_var.set(f"SV: {best_sv:.2f}")
             self._iter_var.set(
-                f"Iter: {n_callbacks}/{niter}" if niter else f"Iter: {n_callbacks}")
-            self._time_var.set(_fmt_time_info(elapsed_s, n_callbacks, niter))
-            if niter:
-                self._niter = niter
+                f"Iter: {n_callbacks}/{expected}" if expected else f"Iter: {n_callbacks}")
+            self._time_var.set(_fmt_time_info(elapsed_s, n_callbacks, expected))
+            if expected:
+                self._niter = expected
 
             if phase == 'done':
                 self._status_var.set("Done.")
@@ -272,10 +291,13 @@ class RigorousView:
 
             try:
                 sv_hist = self._run_info.sv_history
+                raw_hist = self._run_info.sv_history_raw
+                rg_hist = self._run_info.rg_history
                 sv_len = len(sv_hist) if sv_hist else 0
                 sv_changed = sv_len != self._last_sv_len
                 if sv_changed:
-                    _draw_sv_history(self._ax_sv, sv_hist, self._niter)
+                    _draw_sv_history(self._ax_sv, sv_hist, self._niter, raw=raw_hist)
+                    _draw_rg_history(self._ax_rg, rg_hist, self._niter)
                     self._last_sv_len = sv_len
             except Exception:
                 sv_changed = False
@@ -326,27 +348,74 @@ def _fmt_duration(seconds):
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
 
+def _expected_total_units(method, niter, n_params):
+    """Return the true progress-unit total for the SV-history axis / ETA.
+
+    For BH, `niter` is the hop count -- one callback per hop, 1:1.
+    For DE, `niter` is only an input to scipy's fixed evaluation budget;
+    the actual number of generations (== callback count) is derived the
+    same way SolverDE computes `maxiter` internally, so progress tracks
+    the real total instead of the raw `niter` value.
+    """
+    if method != 'DE' or not niter or not n_params:
+        return niter
+    try:
+        from molass.Solvers.DE.SolverDE import FEVALS_PER_NITER
+    except Exception:
+        return niter
+    actual_popsize = 15 * n_params  # SolverDE default pop_size=15
+    return max(1, (niter * FEVALS_PER_NITER) // actual_popsize)
+
+
 def _fmt_time_info(elapsed_s, n_done, n_total):
     parts = [f"Elapsed: {_fmt_duration(elapsed_s)}"]
-    if n_done > 0 and n_total > 0 and elapsed_s > 0:
+    if n_done > 0 and n_total > n_done and elapsed_s > 0:
         rate = elapsed_s / n_done
         remaining = (n_total - n_done) * rate
         parts.append(f"ETA: ~{_fmt_duration(remaining)}")
     return "  ".join(parts)
 
 
-def _draw_sv_history(ax, sv_hist, niter=0):
+def _draw_sv_history(ax, sv_hist, niter=0, raw=None):
     ax.cla()
     n = len(sv_hist) if sv_hist else 0
+    if raw:
+        # scattered dots: every individual trial, including rejected ones --
+        # shows the exploration that the flat best-so-far line hides (BH).
+        ax.scatter(range(len(raw)), raw, s=6, alpha=0.35, color='darkorange',
+                   label='all evals')
     if n > 0:
         xs = range(n)
-        ax.step(xs, sv_hist, where='post', lw=1.2, color='steelblue')
+        ax.step(xs, sv_hist, where='post', lw=1.2, color='steelblue', label='best so far')
         ax.set_ylim(bottom=max(0, min(sv_hist) - 5), top=105)
         if niter > n:
             ax.axvspan(n - 1, niter, alpha=0.06, color='grey')
             ax.axvline(n - 1, color='steelblue', lw=0.8, ls='--', alpha=0.6)
-    if niter > 0:
-        ax.set_xlim(0, niter)
-    ax.set_xlabel("BH hop")
+    # niter counts BH hops or DE generations, not evals -- DE evaluates a whole
+    # population per generation, so n can overtake niter well before the run
+    # is "done". Widen the axis to whichever is larger instead of clipping.
+    xlim_max = max(niter, n, len(raw) if raw else 0)
+    if xlim_max > 0:
+        ax.set_xlim(0, xlim_max)
+    ax.set_xlabel("Eval")
     ax.set_ylabel("SV")
-    ax.set_title("SV history")
+    ax.set_title("Function SV")
+    if n > 0 or raw:
+        ax.legend(loc='lower right', fontsize=7)
+
+
+def _draw_rg_history(ax, rg_hist, niter=0):
+    ax.cla()
+    # Rg is a free optimizer parameter (one column per component), so unlike
+    # SV there's no "best so far" to accumulate -- just the raw trajectories.
+    n = len(rg_hist[0]) if rg_hist and rg_hist[0] else 0
+    for k, ys in enumerate(rg_hist or []):
+        ax.plot(range(len(ys)), ys, lw=1.0, label=f"Comp {k + 1}")
+    xlim_max = max(niter, n)
+    if xlim_max > 0:
+        ax.set_xlim(0, xlim_max)
+    ax.set_xlabel("Eval")
+    ax.set_ylabel("Rg")
+    ax.set_title("Rg Values")
+    if rg_hist:
+        ax.legend(loc='upper right', fontsize=7, ncol=min(len(rg_hist), 4))

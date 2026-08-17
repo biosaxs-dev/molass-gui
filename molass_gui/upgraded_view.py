@@ -6,7 +6,8 @@ _METHOD_LABELS = ['BH', 'DE']
 
 
 class UpgradedView:
-    def __init__(self, decomp, trimmed, nc, model_info, parent=None):
+    def __init__(self, decomp, trimmed, nc, model_info, parent=None, app_root=None,
+                 session_tag=None):
         """
         Parameters
         ----------
@@ -19,19 +20,29 @@ class UpgradedView:
         model_info : dict
             Keys: model, pore_dist, ln_pore_sigma.
         parent : tk widget or None
+        app_root : App or None
+            Root window; its close_session() tears down the whole session.
+        session_tag : str or None
+            Data folder name, shown in the title to distinguish concurrent sessions.
         """
         self._decomp = decomp
         self._trimmed = trimmed
         self._nc = nc
         self._model_info = model_info
         self._parent = parent
+        self._app_root = app_root
+        self._session_tag = session_tag
 
     def show(self):
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
         win = tk.Toplevel(self._parent)
         model = self._model_info['model'].upper()
-        win.title(f"Upgraded View \u2014 {model}")
+        title = f"Upgraded View \u2014 {model}"
+        if self._session_tag:
+            title += f"  [{self._session_tag}]"
+        win.title(title)
+        win.protocol("WM_DELETE_WINDOW", self._app_root.close_session)
 
         # Header: method + subprocess + Rigorous button
         hdr = ttk.Frame(win, padding=(8, 4))
@@ -47,7 +58,7 @@ class UpgradedView:
                         variable=self._subprocess_var).pack(side=tk.LEFT, padx=12)
 
         self._rig_btn = ttk.Button(hdr, text="Rigorous Optimization\u2026",
-                                   command=self._proceed_rigorous)
+                                   command=self._proceed_rigorous, style="Accent.TButton")
         self._rig_btn.pack(side=tk.RIGHT, padx=8)
 
         # Show plot_components for the current model
@@ -92,4 +103,5 @@ class UpgradedView:
 
         from molass_gui.rigorous_view import RigorousView
         RigorousView(self._decomp, self._trimmed, est_kwargs,
-                     analysis_folder=folder, parent=self._win).show()
+                     analysis_folder=folder, parent=self._win,
+                     app_root=self._app_root, session_tag=self._session_tag).show()

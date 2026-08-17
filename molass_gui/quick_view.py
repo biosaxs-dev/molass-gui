@@ -16,17 +16,23 @@ _MODEL_LABELS = [m[0] for m in _MODEL_OPTIONS]
 
 
 class QuickView:
-    def __init__(self, decomp, trimmed, nc, parent=None):
+    def __init__(self, decomp, trimmed, nc, parent=None, app_root=None, session_tag=None):
         self._decomp = decomp
         self._trimmed = trimmed
         self._nc = nc
         self._parent = parent
+        self._app_root = app_root
+        self._session_tag = session_tag
 
     def show(self):
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
         win = tk.Toplevel(self._parent)
-        win.title("Quick Optimization View")
+        title = "Quick Optimization View"
+        if self._session_tag:
+            title += f"  [{self._session_tag}]"
+        win.title(title)
+        win.protocol("WM_DELETE_WINDOW", self._app_root.close_session)
 
         # Header: model selection + PSD σ (conditional) + Upgrade / Skip buttons
         hdr = ttk.Frame(win, padding=(8, 4))
@@ -45,7 +51,8 @@ class QuickView:
         ttk.Entry(self._psd_frame, textvariable=self._psd_sigma_var, width=6).pack(
             side=tk.LEFT, padx=4)
 
-        self._action_btn = ttk.Button(hdr, text="Skip", command=self._skip)
+        self._action_btn = ttk.Button(hdr, text="Skip", command=self._skip,
+                                      style="Accent.TButton")
         self._action_btn.pack(side=tk.RIGHT, padx=8)
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
@@ -77,7 +84,8 @@ class QuickView:
         model_info = {'model': 'egh', 'pore_dist': None, 'ln_pore_sigma': None}
         from molass_gui.upgraded_view import UpgradedView
         UpgradedView(self._decomp, self._trimmed, self._nc, model_info,
-                     parent=self._win).show()
+                     parent=self._win, app_root=self._app_root,
+                     session_tag=self._session_tag).show()
 
     def _upgrade(self):
         model_label = self._model_var.get()
@@ -105,7 +113,8 @@ class QuickView:
                     self._status_var.set("")
                     from molass_gui.upgraded_view import UpgradedView
                     UpgradedView(upgraded, self._trimmed, self._nc, model_info,
-                                 parent=self._win).show()
+                                 parent=self._win, app_root=self._app_root,
+                                 session_tag=self._session_tag).show()
 
                 self._win.after(0, on_main)
             except Exception as exc:
