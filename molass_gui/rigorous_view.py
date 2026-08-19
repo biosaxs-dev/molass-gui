@@ -4,17 +4,19 @@ Receives an already-upgraded Decomposition from UpgradedView (Phase 4).
 Transitions: computing Rg → scoring → running → done.
 """
 import os
-import queue
 import traceback
 import threading
 import time
 import tkinter as tk
 from tkinter import ttk
 
+from molass_gui.params_dialog import show_parameters_lazy
+from molass_gui.window_tree import register_window_cleanup, register_close_guard
+
 
 class RigorousView:
     def __init__(self, decomp, trimmed, est_kwargs, analysis_folder, parent=None,
-                 app_root=None, session_tag=None):
+                 app_root=None, session_tag=None, score=None):
         """
         Parameters
         ----------
@@ -31,6 +33,9 @@ class RigorousView:
             Root window; its close_session() tears down the whole session.
         session_tag : str or None
             Data folder name, shown in the title to distinguish concurrent sessions.
+        score : Score or None
+            Already-built Score (from UpgradedView), if any -- reused instead of
+            rebuilding in _prep_main.
         """
         self._decomp = decomp
         self._trimmed = trimmed
@@ -40,7 +45,7 @@ class RigorousView:
         self._app_root = app_root
         self._session_tag = session_tag
         self._decomp_for_opt = None
-        self._score = None
+        self._score = score
         self._run_info = None
         self._stopped = False
         self._niter = 0
@@ -64,8 +69,11 @@ class RigorousView:
             title += f"  [{self._session_tag}]"
         win.title(title)
         win.protocol("WM_DELETE_WINDOW", self._app_root.close_session)
-        self._app_root.register_cleanup(
-            lambda: self._run_info.stop() if self._run_info is not None else None)
+        register_window_cleanup(
+            win, lambda: self._run_info.stop() if self._run_info is not None else None)
+        register_close_guard(
+            win, lambda: self._run_info is not None and self._run_info.is_alive,
+            "Rigorous optimization run in progress")
 
         # Prep phase header (hidden after prep completes)
         self._prep_frame = ttk.Frame(win, padding=(8, 2))
@@ -93,6 +101,11 @@ class RigorousView:
         self._action_btn = ttk.Button(hdr, text="Terminate", command=self._stop,
                                       state='disabled', style="Danger.TButton")
         self._action_btn.pack(side=tk.RIGHT, padx=8)
+        self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
+                                      command=self._show_parameters, state="disabled")
+        self._params_btn.pack(side=tk.RIGHT, padx=8)
+        if self._score is not None:
+            self._params_btn.state(["!disabled"])
 
         # 5-panel figure: top 3 panels + Function SV row + Rg Values row
         self._fig = plt.figure(figsize=(18, 8.0))
@@ -115,41 +128,35 @@ class RigorousView:
         self._canvas = canvas
         self._win = win
 
-        self._prep_q = queue.Queue()
-        threading.Thread(target=self._prep_worker, daemon=True).start()
-        win.after(100, self._prep_poll)
+        self._win.after(10, self._prep_main)
 
     # ------------------------------------------------------------------
     # Prep phase
 
-    def _prep_worker(self):
+    def _prep_main(self):
+        """Main-thread: compute Rg curve (usually instant -- cached by QuickView/
+        UpgradedView) then build the optimizer via score().
+
+        Runs synchronously on the main thread rather than a background thread.
+        score()'s construction path goes through legacy code whose thread-safety
+        with the active Tk/matplotlib backend is not guaranteed; running it off
+        the main thread previously crashed the whole process (Tcl_AsyncDelete,
+        molass-gui#1) even after get_rg_curve() itself was confirmed cached.
+        """
         try:
-            # Upgrade already done in Phase 3; compute Rg then score
             def _rg_cb(rg_buffer, j):
-                self._prep_q.put(('rg', j))
+                self._pb['value'] = j
+                self._win.update_idletasks()
             self._decomp.get_rg_curve(progress_cb=_rg_cb)
             self._decomp_for_opt = self._decomp
-            score = self._decomp_for_opt.score(trimmed_ssd=self._trimmed)
-            self._prep_q.put(('done', score))
+            if self._score is None:
+                self._prep_var.set("Building optimizer\u2026")
+                self._win.update_idletasks()
+                self._score = self._decomp_for_opt.score(trimmed_ssd=self._trimmed)
+            self._on_prep_done(self._score)
         except Exception as exc:
             short = str(exc).split('\n')[0][:120]
-            self._prep_q.put(('error', short))
-
-    def _prep_poll(self):
-        while True:
-            try:
-                item = self._prep_q.get_nowait()
-            except queue.Empty:
-                break
-            if item[0] == 'rg':
-                self._pb['value'] = item[1]
-            elif item[0] == 'done':
-                self._on_prep_done(item[1])
-                return
-            elif item[0] == 'error':
-                self._prep_var.set(f"Prep error: {item[1]}")
-                return
-        self._win.after(100, self._prep_poll)
+            self._prep_var.set(f"Prep error: {short}")
 
     def _on_prep_done(self, score):
         self._score = score
@@ -166,7 +173,17 @@ class RigorousView:
         self._canvas.draw()
         self._status_var.set(f"Ready \u2014 SV={score.sv:.2f}")
         self._sv_var.set(f"SV: {score.sv:.2f}")
+        self._params_btn.state(["!disabled"])
         self._optimize()  # auto-start; user can Terminate if needed
+
+    def _show_parameters(self):
+        # run_info.best_params reflects the live/final run once one exists;
+        # falls back to the initial score's params before/without a run.
+        params = None
+        if self._run_info is not None:
+            params = self._run_info.best_params
+        show_parameters_lazy(self, self._win, self._status_var, self._decomp_for_opt,
+                             self._trimmed, params=params)
 
     # ------------------------------------------------------------------
     # Optimization phase
@@ -208,42 +225,52 @@ class RigorousView:
     def _on_started(self):
         self._action_btn.state(['!disabled'])
         self._status_var.set("Running\u2026")
-        threading.Thread(target=self._watch_loop, daemon=True).start()
+        self._win.after(0, self._watch_tick)
         self._win.after(500, self._ui_poll)
 
-    def _watch_loop(self):
-        """Background: redraw UV/XR/score panels every ~3 s."""
-        first = True
-        while not self._stopped:
-            if first:
-                first = False
-            else:
-                time.sleep(3.0)
-            try:
-                opt = self._run_info.optimizer
-                params = self._run_info.best_params
-                if params is None:
-                    params = self._run_info.init_params
-                if params is not None:
-                    lock = getattr(opt, '_objective_lock', None)
-                    acquired = lock.acquire(timeout=1.5) if lock else True
-                    if acquired:
-                        try:
-                            for ax in (self._ax_uv, self._ax_xr, self._ax_score,
-                                       self._ax_xr_twin):
-                                ax.cla()
-                            self._ax_xr_twin.grid(False)
-                            opt.objective_func(params, plot=True,
-                                               axis_info=self._axis_info)
-                            sv_hist = self._run_info.sv_history
-                            sv_now = sv_hist[-1] if sv_hist else None
-                            _retitle_panels(self._ax_uv, self._ax_xr, self._ax_score, sv_now)
-                        finally:
-                            if lock:
-                                lock.release()
-                        self._redraw_event.set()
-            except Exception:
-                pass
+    def _watch_tick(self):
+        """Main-thread, self-rescheduling: redraw UV/XR/score panels every ~3 s.
+
+        Must run on the main thread -- matplotlib artists backing a Tk-embedded
+        figure are not thread-safe, and mutating them off-thread previously
+        crashed the whole process (Tcl_AsyncDelete, molass-gui#1).
+        """
+        if self._stopped:
+            return
+        try:
+            opt = self._run_info.optimizer
+            params = self._run_info.best_params
+            if params is None:
+                params = self._run_info.init_params
+            if params is not None:
+                lock = getattr(opt, '_objective_lock', None)
+                # Short timeout: this runs on the main thread, so a long wait
+                # here would freeze the whole GUI, not just this redraw.
+                acquired = lock.acquire(timeout=0.3) if lock else True
+                if acquired:
+                    try:
+                        for ax in (self._ax_uv, self._ax_xr, self._ax_score,
+                                   self._ax_xr_twin):
+                            ax.cla()
+                        self._ax_xr_twin.grid(False)
+                        opt.objective_func(params, plot=True,
+                                           axis_info=self._axis_info)
+                        sv_hist = self._run_info.sv_history
+                        # Fall back to the already-known initial score while
+                        # sv_history is still empty (run just started, no
+                        # accepted trial yet) -- otherwise the SV title
+                        # regresses from a known value to blank and then
+                        # reappears once the first trial is recorded.
+                        sv_now = sv_hist[-1] if sv_hist else getattr(self._score, 'sv', None)
+                        _retitle_panels(self._ax_uv, self._ax_xr, self._ax_score, sv_now)
+                    finally:
+                        if lock:
+                            lock.release()
+                    self._redraw_event.set()
+        except Exception:
+            pass
+        if not self._stopped:
+            self._win.after(3000, self._watch_tick)
 
     def _ui_poll(self):
         """Main-thread: update labels and flush canvas every 500 ms."""

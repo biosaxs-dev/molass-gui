@@ -2,12 +2,16 @@
 import tkinter as tk
 from tkinter import ttk
 
+from molass_gui.plot_embed import embed_plot
+from molass_gui.rgcurve_worker import start_rgcurve_worker
+from molass_gui.params_dialog import show_parameters_lazy
+
 _METHOD_LABELS = ['BH', 'DE']
 
 
 class UpgradedView:
     def __init__(self, decomp, trimmed, nc, model_info, parent=None, app_root=None,
-                 session_tag=None):
+                 session_tag=None, rgcurve=None, score=None):
         """
         Parameters
         ----------
@@ -24,6 +28,13 @@ class UpgradedView:
             Root window; its close_session() tears down the whole session.
         session_tag : str or None
             Data folder name, shown in the title to distinguish concurrent sessions.
+        rgcurve : RgCurve or None
+            Already-computed Rg curve (from QuickView), if ready -- shown immediately.
+            If None, computed here in the background and overlaid once ready.
+        score : Score or None
+            Already-built Score (from QuickView's Skip path, same decomp), if any --
+            reused for "Show Parameters" instead of rebuilding. None on the Upgrade
+            path, since the model (and thus the optimizer) has changed.
         """
         self._decomp = decomp
         self._trimmed = trimmed
@@ -32,10 +43,11 @@ class UpgradedView:
         self._parent = parent
         self._app_root = app_root
         self._session_tag = session_tag
+        self._rgcurve = rgcurve
+        self._score = score
+        self._plot_state = None
 
     def show(self):
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-
         win = tk.Toplevel(self._parent)
         model = self._model_info['model'].upper()
         title = f"Upgraded View \u2014 {model}"
@@ -60,14 +72,42 @@ class UpgradedView:
         self._rig_btn = ttk.Button(hdr, text="Rigorous Optimization\u2026",
                                    command=self._proceed_rigorous, style="Accent.TButton")
         self._rig_btn.pack(side=tk.RIGHT, padx=8)
+        if self._rgcurve is None:
+            # RigorousView would otherwise start its own concurrent get_rg_curve()
+            # on this same decomp if clicked before our own background compute finishes.
+            self._rig_btn.state(["disabled"])
+        self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
+                                      command=self._show_parameters, state="disabled")
+        self._params_btn.pack(side=tk.RIGHT, padx=8)
+        if self._rgcurve is not None:
+            self._params_btn.state(["!disabled"])
+        self._status_var = tk.StringVar(value="")
+        ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
+            side=tk.LEFT, padx=8)
+        self._rg_var = tk.StringVar(value="")
+        ttk.Label(hdr, textvariable=self._rg_var, foreground="gray").pack(
+            side=tk.LEFT, padx=8)
 
-        # Show plot_components for the current model
-        result = self._decomp.plot_components()
-        canvas = FigureCanvasTkAgg(result.fig, master=win)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        NavigationToolbar2Tk(canvas, win).update()
+        # Show plot_components for the current model; overlay Rg curve immediately if
+        # QuickView already computed it, otherwise compute it here in the background.
+        result = self._decomp.plot_components(rgcurve=self._rgcurve, rg_cmap='YlGn',
+                                              rg_alpha_by_score=True, rg_alpha_power=2.5)
+        self._plot_state = embed_plot(win, result.fig)
         self._win = win
+
+        if self._rgcurve is None:
+            start_rgcurve_worker(win, self._decomp, self._rg_var, self._on_rgcurve_ready)
+
+    def _on_rgcurve_ready(self, rgcurve):
+        self._rgcurve = rgcurve
+        result = self._decomp.plot_components(rgcurve=rgcurve, rg_cmap='YlGn',
+                                              rg_alpha_by_score=True, rg_alpha_power=2.5)
+        self._plot_state = embed_plot(self._win, result.fig, previous=self._plot_state)
+        self._rig_btn.state(["!disabled"])
+        self._params_btn.state(["!disabled"])
+
+    def _show_parameters(self):
+        show_parameters_lazy(self, self._win, self._status_var, self._decomp, self._trimmed)
 
     def _proceed_rigorous(self):
         from tkinter import filedialog
@@ -104,4 +144,6 @@ class UpgradedView:
         from molass_gui.rigorous_view import RigorousView
         RigorousView(self._decomp, self._trimmed, est_kwargs,
                      analysis_folder=folder, parent=self._win,
-                     app_root=self._app_root, session_tag=self._session_tag).show()
+                     app_root=self._app_root, session_tag=self._session_tag,
+                     score=self._score).show()
+        self._win.iconify()

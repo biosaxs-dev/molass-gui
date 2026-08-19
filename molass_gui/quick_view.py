@@ -3,6 +3,10 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
+from molass_gui.plot_embed import embed_plot
+from molass_gui.rgcurve_worker import start_rgcurve_worker
+from molass_gui.params_dialog import show_parameters_lazy
+
 # (label, recipe model key, pore_dist kwarg or None)
 _MODEL_OPTIONS = [
     ('EGH',                        'egh',  None),
@@ -23,10 +27,11 @@ class QuickView:
         self._parent = parent
         self._app_root = app_root
         self._session_tag = session_tag
+        self._rgcurve = None
+        self._plot_state = None
+        self._score = None
 
     def show(self):
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-
         win = tk.Toplevel(self._parent)
         title = "Quick Optimization View"
         if self._session_tag:
@@ -54,8 +59,18 @@ class QuickView:
         self._action_btn = ttk.Button(hdr, text="Skip", command=self._skip,
                                       style="Accent.TButton")
         self._action_btn.pack(side=tk.RIGHT, padx=8)
+        # Disabled until the Rg curve is ready -- Skip/Upgrade hand this decomp to
+        # UpgradedView, which would otherwise start its own concurrent get_rg_curve()
+        # on the same object if the user proceeds before this one finishes.
+        self._action_btn.state(["disabled"])
+        self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
+                                      command=self._show_parameters, state="disabled")
+        self._params_btn.pack(side=tk.RIGHT, padx=8)
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
+            side=tk.LEFT, padx=8)
+        self._rg_var = tk.StringVar(value="")
+        ttk.Label(hdr, textvariable=self._rg_var, foreground="gray").pack(
             side=tk.LEFT, padx=8)
 
         def _on_model_change(*_):
@@ -72,20 +87,34 @@ class QuickView:
                 self._action_btn.configure(text='Upgrade', command=self._upgrade)
         self._model_var.trace_add('write', _on_model_change)
 
-        # Show EGH plot_components immediately
+        # Show EGH plot_components immediately; Rg curve overlay follows once ready
         result = self._decomp.plot_components()
-        canvas = FigureCanvasTkAgg(result.fig, master=win)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        NavigationToolbar2Tk(canvas, win).update()
+        self._plot_state = embed_plot(win, result.fig)
         self._win = win
+
+        start_rgcurve_worker(win, self._decomp, self._rg_var, self._on_rgcurve_ready)
+
+    def _on_rgcurve_ready(self, rgcurve):
+        self._rgcurve = rgcurve
+        result = self._decomp.plot_components(rgcurve=rgcurve, rg_cmap='YlGn',
+                                              rg_alpha_by_score=True, rg_alpha_power=2.5)
+        self._plot_state = embed_plot(self._win, result.fig, previous=self._plot_state)
+        self._action_btn.state(["!disabled"])
+        self._params_btn.state(["!disabled"])
+
+    def _show_parameters(self):
+        # Lazy build (Option B): first click here pays the one-time score()
+        # construction cost; cached in self._score for subsequent clicks and
+        # for reuse by UpgradedView on the Skip path (same decomp, no rebuild).
+        show_parameters_lazy(self, self._win, self._status_var, self._decomp, self._trimmed)
 
     def _skip(self):
         model_info = {'model': 'egh', 'pore_dist': None, 'ln_pore_sigma': None}
         from molass_gui.upgraded_view import UpgradedView
         UpgradedView(self._decomp, self._trimmed, self._nc, model_info,
-                     parent=self._win, app_root=self._app_root,
-                     session_tag=self._session_tag).show()
+                     rgcurve=self._rgcurve, score=self._score, parent=self._win,
+                     app_root=self._app_root, session_tag=self._session_tag).show()
+        self._win.iconify()
 
     def _upgrade(self):
         model_label = self._model_var.get()
@@ -112,9 +141,12 @@ class QuickView:
                     self._action_btn.state(["!disabled"])
                     self._status_var.set("")
                     from molass_gui.upgraded_view import UpgradedView
+                    # score=None: model changed, so QuickView's cached score (if any)
+                    # no longer applies -- UpgradedView builds its own on first use.
                     UpgradedView(upgraded, self._trimmed, self._nc, model_info,
-                                 parent=self._win, app_root=self._app_root,
-                                 session_tag=self._session_tag).show()
+                                 rgcurve=self._rgcurve, score=None, parent=self._win,
+                                 app_root=self._app_root, session_tag=self._session_tag).show()
+                    self._win.iconify()
 
                 self._win.after(0, on_main)
             except Exception as exc:
