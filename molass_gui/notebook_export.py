@@ -5,6 +5,7 @@ the GUI so far, so the user can keep going with full notebook flexibility
 (re-run with different parameters, compare runs side by side, etc.) -- see
 the molass-gui design philosophy note in repo memory (2026-08-20).
 """
+import os
 import shutil
 import subprocess
 from tkinter import filedialog, messagebox
@@ -99,15 +100,24 @@ def export_and_open(ctx, parent_win):
     convenience bridge, not a critical path; the GUI session keeps working
     regardless of the outcome.
     """
+    from datetime import datetime
+    # Timestamped default name -- a reused fixed name (e.g. molass_session.ipynb)
+    # would silently reopen an already-open stale tab: VS Code's notebook editor
+    # does not reliably auto-reload an open .ipynb when it changes on disk
+    # externally, so re-exporting to the same path can appear to "not work"
+    # even though the file itself was written correctly (see repo memory).
+    default_name = f"molass_session_{datetime.now():%Y%m%d_%H%M%S}.ipynb"
     path = filedialog.asksaveasfilename(
         title="Save notebook as",
         defaultextension=".ipynb",
         filetypes=[("Jupyter Notebook", "*.ipynb")],
-        initialfile="molass_session.ipynb",
+        initialfile=default_name,
         parent=parent_win,
     )
     if not path:
         return
+
+    overwriting_existing = os.path.exists(path)
 
     try:
         nb = build_notebook(ctx)
@@ -120,5 +130,12 @@ def export_and_open(ctx, parent_win):
         messagebox.showinfo(
             "Notebook saved",
             f"Saved to:\n{path}\n\n(VS Code CLI not found on PATH -- open it manually.)",
+            parent=parent_win,
+        )
+    elif overwriting_existing:
+        messagebox.showinfo(
+            "Notebook updated",
+            "If this notebook was already open in VS Code, its tab may not "
+            "auto-refresh -- close and reopen the tab to see the update.",
             parent=parent_win,
         )
