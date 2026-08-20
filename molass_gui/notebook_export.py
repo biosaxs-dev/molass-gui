@@ -54,16 +54,11 @@ def build_notebook(ctx):
             "corrected = trimmed.corrected_copy()\n"
             f"decomp = corrected.quick_decomposition(num_components={ctx.num_components})\n"
             "rgcurve = decomp.get_rg_curve()\n"
-            "decomp.plot_components(rgcurve=rgcurve, rg_cmap='YlGn', "
-            "rg_alpha_by_score=True, rg_alpha_power=2.5)"
+            "decomp.plot_components(rgcurve=rgcurve)"
         ))
 
     if ctx.model_info is not None and ctx.model_info['model'] != 'egh':
-        cells.append(_code(
-            _upgrade_call(ctx.model_info) + "\n"
-            "decomp.plot_components(rgcurve=rgcurve, rg_cmap='YlGn', "
-            "rg_alpha_by_score=True, rg_alpha_power=2.5)"
-        ))
+        cells.append(_code(_upgrade_call(ctx.model_info) + "\ndecomp.plot_components(rgcurve=rgcurve)"))
 
     if ctx.method is not None:
         cells.append(_code(
