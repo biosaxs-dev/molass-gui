@@ -59,7 +59,7 @@ class NaiveView:
                     from molass_gui.quick_view import QuickView
                     QuickView(decomp, self._trimmed, nc, parent=self._win,
                               app_root=self._app_root, session_tag=self._session_tag).show()
-                    self._win.iconify()
+                    self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
 
                 self._win.after(0, on_main)
             except Exception as exc:

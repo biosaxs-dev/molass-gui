@@ -146,4 +146,4 @@ class UpgradedView:
                      analysis_folder=folder, parent=self._win,
                      app_root=self._app_root, session_tag=self._session_tag,
                      score=self._score).show()
-        self._win.iconify()
+        self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail

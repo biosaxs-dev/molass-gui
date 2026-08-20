@@ -128,7 +128,7 @@ class App(tk.Tk):
                     from molass_gui.naive_view import NaiveView
                     NaiveView(ssd, trimmed, parent=self, app_root=self,
                               session_tag=session_tag).show()
-                    self.iconify()
+                    self.withdraw()  # unmap, not just minimize -- keeps only NaiveView on the taskbar
 
                 self.after(0, on_main)
 

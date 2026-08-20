@@ -114,7 +114,7 @@ class QuickView:
         UpgradedView(self._decomp, self._trimmed, self._nc, model_info,
                      rgcurve=self._rgcurve, score=self._score, parent=self._win,
                      app_root=self._app_root, session_tag=self._session_tag).show()
-        self._win.iconify()
+        self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
 
     def _upgrade(self):
         model_label = self._model_var.get()
@@ -146,7 +146,7 @@ class QuickView:
                     UpgradedView(upgraded, self._trimmed, self._nc, model_info,
                                  rgcurve=self._rgcurve, score=None, parent=self._win,
                                  app_root=self._app_root, session_tag=self._session_tag).show()
-                    self._win.iconify()
+                    self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
 
                 self._win.after(0, on_main)
             except Exception as exc:
