@@ -71,21 +71,30 @@ def build_notebook(ctx):
             "score.print_summary()\n"
             "score.plot()"
         ))
-        in_process = not ctx.use_subprocess
-        cells.append(_code(
-            "# Sibling folder, not the GUI's own analysis_folder -- reusing that path\n"
-            "# exactly can collide with the GUI's own run still using it (optimize_rigorously\n"
-            "# would just reconnect to it instead of starting a fresh monitored run).\n"
-            f"analysis_folder = r\"{ctx.analysis_folder}_notebook\"\n"
-            "run_info = decomp.optimize_rigorously(\n"
-            "    trimmed_ssd=trimmed,\n"
-            f"    method={ctx.method.upper()!r},\n"
-            f"    in_process={in_process!r},\n"
-            "    analysis_folder=analysis_folder,\n"
-            "    async_=True,\n"
-            "    monitor=True,\n"
-            ")"
-        ))
+        # in_process is deliberately omitted -- always use the library default
+        # (True). The GUI's own "Use subprocess" option exists to isolate the
+        # optimizer from Tkinter/matplotlib running in the same process; that
+        # concern doesn't apply to a fresh notebook kernel, and in_process=False
+        # here would need pipeline_recipe= to avoid a DeprecationWarning. method
+        # is only shown when it's a deliberate non-default choice, keeping the
+        # common case (BH) as simple as possible for a general audience.
+        lines = [
+            "# Sibling folder, not the GUI's own analysis_folder -- reusing that path",
+            "# exactly can collide with the GUI's own run still using it (optimize_rigorously",
+            "# would just reconnect to it instead of starting a fresh monitored run).",
+            f'analysis_folder = r"{ctx.analysis_folder}_notebook"',
+            "run_info = decomp.optimize_rigorously(",
+            "    trimmed_ssd=trimmed,",
+        ]
+        if ctx.method.upper() != 'BH':
+            lines.append(f"    method={ctx.method.upper()!r},")
+        lines += [
+            "    analysis_folder=analysis_folder,",
+            "    async_=True,",
+            "    monitor=True,",
+            ")",
+        ]
+        cells.append(_code("\n".join(lines)))
         cells.append(_code("run_info.live_status()"))
 
     nb = nbf.v4.new_notebook()
