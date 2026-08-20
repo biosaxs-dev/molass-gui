@@ -10,7 +10,7 @@ _METHOD_LABELS = ['BH', 'DE']
 
 
 class UpgradedView:
-    def __init__(self, decomp, trimmed, nc, model_info, parent=None, app_root=None,
+    def __init__(self, decomp, trimmed, nc, model_info, ctx, parent=None, app_root=None,
                  session_tag=None, rgcurve=None, score=None):
         """
         Parameters
@@ -23,6 +23,8 @@ class UpgradedView:
             Number of components (for pipeline_recipe).
         model_info : dict
             Keys: model, pore_dist, ln_pore_sigma.
+        ctx : SessionContext
+            Accumulated GUI choices, for "Continue in Notebook…".
         parent : tk widget or None
         app_root : App or None
             Root window; its close_session() tears down the whole session.
@@ -40,6 +42,7 @@ class UpgradedView:
         self._trimmed = trimmed
         self._nc = nc
         self._model_info = model_info
+        self._ctx = ctx
         self._parent = parent
         self._app_root = app_root
         self._session_tag = session_tag
@@ -78,8 +81,8 @@ class UpgradedView:
             self._rig_btn.state(["disabled"])
         self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
                                       command=self._show_parameters, state="disabled")
-        self._params_btn.pack(side=tk.RIGHT, padx=8)
-        if self._rgcurve is not None:
+        self._params_btn.pack(side=tk.RIGHT, padx=8)        ttk.Button(hdr, text="Continue in Notebook…",
+                  command=self._continue_in_notebook).pack(side=tk.RIGHT, padx=8)        if self._rgcurve is not None:
             self._params_btn.state(["!disabled"])
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
@@ -108,6 +111,10 @@ class UpgradedView:
 
     def _show_parameters(self):
         show_parameters_lazy(self, self._win, self._status_var, self._decomp, self._trimmed)
+
+    def _continue_in_notebook(self):
+        from molass_gui.notebook_export import export_and_open
+        export_and_open(self._ctx, self._win)
 
     def _proceed_rigorous(self):
         from tkinter import filedialog
@@ -141,9 +148,13 @@ class UpgradedView:
             'pipeline_recipe': pipeline_recipe,
         }
 
+        self._ctx.method = method
+        self._ctx.use_subprocess = use_subprocess
+        self._ctx.analysis_folder = folder
+
         from molass_gui.rigorous_view import RigorousView
         RigorousView(self._decomp, self._trimmed, est_kwargs,
-                     analysis_folder=folder, parent=self._win,
+                     analysis_folder=folder, ctx=self._ctx, parent=self._win,
                      app_root=self._app_root, session_tag=self._session_tag,
                      score=self._score).show()
         self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail

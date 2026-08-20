@@ -20,10 +20,11 @@ _MODEL_LABELS = [m[0] for m in _MODEL_OPTIONS]
 
 
 class QuickView:
-    def __init__(self, decomp, trimmed, nc, parent=None, app_root=None, session_tag=None):
+    def __init__(self, decomp, trimmed, nc, ctx, parent=None, app_root=None, session_tag=None):
         self._decomp = decomp
         self._trimmed = trimmed
         self._nc = nc
+        self._ctx = ctx
         self._parent = parent
         self._app_root = app_root
         self._session_tag = session_tag
@@ -65,8 +66,8 @@ class QuickView:
         self._action_btn.state(["disabled"])
         self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
                                       command=self._show_parameters, state="disabled")
-        self._params_btn.pack(side=tk.RIGHT, padx=8)
-        self._status_var = tk.StringVar(value="")
+        self._params_btn.pack(side=tk.RIGHT, padx=8)        ttk.Button(hdr, text="Continue in Notebook…",
+                  command=self._continue_in_notebook).pack(side=tk.RIGHT, padx=8)        self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
             side=tk.LEFT, padx=8)
         self._rg_var = tk.StringVar(value="")
@@ -108,10 +109,15 @@ class QuickView:
         # for reuse by UpgradedView on the Skip path (same decomp, no rebuild).
         show_parameters_lazy(self, self._win, self._status_var, self._decomp, self._trimmed)
 
+    def _continue_in_notebook(self):
+        from molass_gui.notebook_export import export_and_open
+        export_and_open(self._ctx, self._win)
+
     def _skip(self):
         model_info = {'model': 'egh', 'pore_dist': None, 'ln_pore_sigma': None}
+        self._ctx.model_info = model_info
         from molass_gui.upgraded_view import UpgradedView
-        UpgradedView(self._decomp, self._trimmed, self._nc, model_info,
+        UpgradedView(self._decomp, self._trimmed, self._nc, model_info, self._ctx,
                      rgcurve=self._rgcurve, score=self._score, parent=self._win,
                      app_root=self._app_root, session_tag=self._session_tag).show()
         self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
@@ -136,6 +142,7 @@ class QuickView:
                 upgraded = self._decomp.upgrade(model_key, **upgrade_kwargs)
                 model_info = {'model': model_key, 'pore_dist': pore_dist,
                               'ln_pore_sigma': ln_pore_sigma}
+                self._ctx.model_info = model_info
 
                 def on_main():
                     self._action_btn.state(["!disabled"])
@@ -143,7 +150,7 @@ class QuickView:
                     from molass_gui.upgraded_view import UpgradedView
                     # score=None: model changed, so QuickView's cached score (if any)
                     # no longer applies -- UpgradedView builds its own on first use.
-                    UpgradedView(upgraded, self._trimmed, self._nc, model_info,
+                    UpgradedView(upgraded, self._trimmed, self._nc, model_info, self._ctx,
                                  rgcurve=self._rgcurve, score=None, parent=self._win,
                                  app_root=self._app_root, session_tag=self._session_tag).show()
                     self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail

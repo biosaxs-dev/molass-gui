@@ -15,7 +15,7 @@ from molass_gui.window_tree import register_window_cleanup, register_close_guard
 
 
 class RigorousView:
-    def __init__(self, decomp, trimmed, est_kwargs, analysis_folder, parent=None,
+    def __init__(self, decomp, trimmed, est_kwargs, analysis_folder, ctx=None, parent=None,
                  app_root=None, session_tag=None, score=None):
         """
         Parameters
@@ -28,6 +28,8 @@ class RigorousView:
             Keys: use_subprocess, pipeline_recipe.
         analysis_folder : str
             Output folder for optimization results.
+        ctx : SessionContext or None
+            Accumulated GUI choices, for "Continue in Notebook…".
         parent : tk widget or None
         app_root : App or None
             Root window; its close_session() tears down the whole session.
@@ -41,6 +43,7 @@ class RigorousView:
         self._trimmed = trimmed
         self._est_kwargs = est_kwargs
         self._analysis_folder = analysis_folder
+        self._ctx = ctx
         self._parent = parent
         self._app_root = app_root
         self._session_tag = session_tag
@@ -104,6 +107,9 @@ class RigorousView:
         self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
                                       command=self._show_parameters, state="disabled")
         self._params_btn.pack(side=tk.RIGHT, padx=8)
+        if self._ctx is not None:
+            ttk.Button(hdr, text="Continue in Notebook\u2026",
+                      command=self._continue_in_notebook).pack(side=tk.RIGHT, padx=8)
         if self._score is not None:
             self._params_btn.state(["!disabled"])
 
@@ -184,6 +190,10 @@ class RigorousView:
             params = self._run_info.best_params
         show_parameters_lazy(self, self._win, self._status_var, self._decomp_for_opt,
                              self._trimmed, params=params)
+
+    def _continue_in_notebook(self):
+        from molass_gui.notebook_export import export_and_open
+        export_and_open(self._ctx, self._win)
 
     # ------------------------------------------------------------------
     # Optimization phase

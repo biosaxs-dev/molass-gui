@@ -9,6 +9,7 @@ version = "0.1.1"
 dependencies = [
   "molass>=1.0.5",
   "molass_legacy>=1.6.13",
+  "nbformat",
 ]
 
 requires-python = ">=3.9,<3.15"

@@ -5,9 +5,10 @@ from tkinter import ttk
 
 
 class NaiveView:
-    def __init__(self, ssd, trimmed, parent=None, app_root=None, session_tag=None):
+    def __init__(self, ssd, trimmed, ctx, parent=None, app_root=None, session_tag=None):
         self._ssd = ssd
         self._trimmed = trimmed
+        self._ctx = ctx
         self._parent = parent
         self._app_root = app_root
         self._session_tag = session_tag
@@ -32,6 +33,8 @@ class NaiveView:
         self._decomp_btn = ttk.Button(hdr, text="Decompose", command=self._decompose,
                                      style="Accent.TButton")
         self._decomp_btn.pack(side=tk.LEFT, padx=12)
+        ttk.Button(hdr, text="Continue in Notebook…",
+                  command=self._continue_in_notebook).pack(side=tk.RIGHT, padx=8)
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(side=tk.LEFT)
 
@@ -43,10 +46,14 @@ class NaiveView:
         NavigationToolbar2Tk(canvas, win).update()
         self._win = win
 
+    def _continue_in_notebook(self):
+        from molass_gui.notebook_export import export_and_open
+        export_and_open(self._ctx, self._win)
+
     def _decompose(self):
         nc = self._nc_var.get()
         self._decomp_btn.state(["disabled"])
-        self._status_var.set("Decomposing\u2026")
+        self._status_var.set("Decomposing…")
 
         def worker():
             try:
@@ -56,8 +63,9 @@ class NaiveView:
                 def on_main():
                     self._decomp_btn.state(["!disabled"])
                     self._status_var.set("")
+                    self._ctx.num_components = nc
                     from molass_gui.quick_view import QuickView
-                    QuickView(decomp, self._trimmed, nc, parent=self._win,
+                    QuickView(decomp, self._trimmed, nc, self._ctx, parent=self._win,
                               app_root=self._app_root, session_tag=self._session_tag).show()
                     self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
 

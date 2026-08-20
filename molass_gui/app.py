@@ -125,8 +125,10 @@ class App(tk.Tk):
                     self._status_var.set("Ready.")
                     recent_folders.add(folder)
                     session_tag = os.path.basename(folder.rstrip("\\/")) or folder
+                    from molass_gui.session_context import SessionContext
+                    ctx = SessionContext(folder)
                     from molass_gui.naive_view import NaiveView
-                    NaiveView(ssd, trimmed, parent=self, app_root=self,
+                    NaiveView(ssd, trimmed, ctx, parent=self, app_root=self,
                               session_tag=session_tag).show()
                     self.withdraw()  # unmap, not just minimize -- keeps only NaiveView on the taskbar
 
