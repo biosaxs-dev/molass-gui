@@ -66,13 +66,15 @@ def build_notebook(ctx):
             "score.print_summary()\n"
             "score.plot()"
         ))
-        # in_process is deliberately omitted -- always use the library default
-        # (True). The GUI's own "Use subprocess" option exists to isolate the
-        # optimizer from Tkinter/matplotlib running in the same process; that
-        # concern doesn't apply to a fresh notebook kernel, and in_process=False
-        # here would need pipeline_recipe= to avoid a DeprecationWarning. method
-        # is only shown when it's a deliberate non-default choice, keeping the
-        # common case (BH) as simple as possible for a general audience.
+        # in_process, async_, monitor, and pipeline_recipe are all deliberately
+        # omitted -- they already match the library's own defaults (True, True,
+        # True, None), and this is the usual pattern anyway. The GUI's own "Use
+        # subprocess" option exists to isolate the optimizer from Tkinter/
+        # matplotlib running in the same process; that concern doesn't apply to
+        # a fresh notebook kernel, and in_process=False here would need
+        # pipeline_recipe= to avoid a DeprecationWarning. method is only shown
+        # when it's a deliberate non-default choice, keeping the common case
+        # (BH) as simple as possible for a general audience.
         lines = [
             "# Sibling folder, not the GUI's own analysis_folder -- reusing that path",
             "# exactly can collide with the GUI's own run still using it (optimize_rigorously",
@@ -85,8 +87,6 @@ def build_notebook(ctx):
             lines.append(f"    method={ctx.method.upper()!r},")
         lines += [
             "    analysis_folder=analysis_folder,",
-            "    async_=True,",
-            "    monitor=True,",
             ")",
         ]
         cells.append(_code("\n".join(lines)))
