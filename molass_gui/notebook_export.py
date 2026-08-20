@@ -53,26 +53,35 @@ def build_notebook(ctx):
         cells.append(_code(
             "corrected = trimmed.corrected_copy()\n"
             f"decomp = corrected.quick_decomposition(num_components={ctx.num_components})\n"
-            "decomp.plot_components()"
+            "rgcurve = decomp.get_rg_curve()\n"
+            "decomp.plot_components(rgcurve=rgcurve, rg_cmap='YlGn', "
+            "rg_alpha_by_score=True, rg_alpha_power=2.5)"
         ))
 
     if ctx.model_info is not None and ctx.model_info['model'] != 'egh':
-        cells.append(_code(_upgrade_call(ctx.model_info) + "\ndecomp.plot_components()"))
+        cells.append(_code(
+            _upgrade_call(ctx.model_info) + "\n"
+            "decomp.plot_components(rgcurve=rgcurve, rg_cmap='YlGn', "
+            "rg_alpha_by_score=True, rg_alpha_power=2.5)"
+        ))
 
     if ctx.method is not None:
         cells.append(_code(
-            "rgcurve = decomp.get_rg_curve()\n"
             "score = decomp.score(trimmed_ssd=trimmed)\n"
             "score.print_summary()\n"
             "score.plot()"
         ))
         in_process = not ctx.use_subprocess
         cells.append(_code(
+            "# Sibling folder, not the GUI's own analysis_folder -- reusing that path\n"
+            "# exactly can collide with the GUI's own run still using it (optimize_rigorously\n"
+            "# would just reconnect to it instead of starting a fresh monitored run).\n"
+            f"analysis_folder = r\"{ctx.analysis_folder}_notebook\"\n"
             "run_info = decomp.optimize_rigorously(\n"
             "    trimmed_ssd=trimmed,\n"
             f"    method={ctx.method.upper()!r},\n"
             f"    in_process={in_process!r},\n"
-            f"    analysis_folder=r\"{ctx.analysis_folder}\",\n"
+            "    analysis_folder=analysis_folder,\n"
             "    async_=True,\n"
             "    monitor=True,\n"
             ")"
