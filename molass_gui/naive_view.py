@@ -33,7 +33,7 @@ class NaiveView:
         self._decomp_btn = ttk.Button(hdr, text="Decompose", command=self._decompose,
                                      style="Accent.TButton")
         self._decomp_btn.pack(side=tk.LEFT, padx=12)
-        ttk.Button(hdr, text="Continue in Notebook…",
+        ttk.Button(hdr, text="Continue in Notebook\u2026",
                   command=self._continue_in_notebook).pack(side=tk.RIGHT, padx=8)
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(side=tk.LEFT)

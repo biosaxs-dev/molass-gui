@@ -81,8 +81,10 @@ class UpgradedView:
             self._rig_btn.state(["disabled"])
         self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
                                       command=self._show_parameters, state="disabled")
-        self._params_btn.pack(side=tk.RIGHT, padx=8)        ttk.Button(hdr, text="Continue in Notebook…",
-                  command=self._continue_in_notebook).pack(side=tk.RIGHT, padx=8)        if self._rgcurve is not None:
+        self._params_btn.pack(side=tk.RIGHT, padx=8)
+        ttk.Button(hdr, text="Continue in Notebook\u2026",
+                  command=self._continue_in_notebook).pack(side=tk.RIGHT, padx=8)
+        if self._rgcurve is not None:
             self._params_btn.state(["!disabled"])
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
