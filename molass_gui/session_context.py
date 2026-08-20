@@ -19,5 +19,4 @@ class SessionContext:
         self.num_components = None
         self.model_info = None       # {'model', 'pore_dist', 'ln_pore_sigma'}
         self.method = None
-        self.use_subprocess = None
         self.analysis_folder = None

@@ -67,14 +67,13 @@ def build_notebook(ctx):
             "score.plot()"
         ))
         # in_process, async_, monitor, and pipeline_recipe are all deliberately
-        # omitted -- they already match the library's own defaults (True, True,
-        # True, None), and this is the usual pattern anyway. The GUI's own "Use
-        # subprocess" option exists to isolate the optimizer from Tkinter/
-        # matplotlib running in the same process; that concern doesn't apply to
-        # a fresh notebook kernel, and in_process=False here would need
-        # pipeline_recipe= to avoid a DeprecationWarning. method is only shown
-        # when it's a deliberate non-default choice, keeping the common case
-        # (BH) as simple as possible for a general audience.
+        # omitted -- they already match the library's own defaults (False, True,
+        # True, None), and this is the usual pattern anyway. Both the GUI and the
+        # exported notebook now get the same subprocess+auto-recipe behavior "for
+        # free" from the library default -- see
+        # molass-library/Copilot/refactor/DESIGN_default_in_process_reversal.md.
+        # method is only shown when it's a deliberate non-default choice, keeping
+        # the common case (BH) as simple as possible for a general audience.
         lines = [
             "# Sibling folder, not the GUI's own analysis_folder -- reusing that path",
             "# exactly can collide with the GUI's own run still using it (optimize_rigorously",

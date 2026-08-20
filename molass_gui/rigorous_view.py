@@ -25,7 +25,7 @@ class RigorousView:
         trimmed : SecSaxsData
             Trimmed (uncorrected) SSD, passed to score().
         est_kwargs : dict
-            Keys: use_subprocess, pipeline_recipe.
+            Keys: pipeline_recipe.
         analysis_folder : str
             Output folder for optimization results.
         ctx : SessionContext or None
@@ -66,8 +66,7 @@ class RigorousView:
         model  = recipe.get('model', 'egh').upper()
         method = recipe.get('method', 'bh').upper()
         self._method = method
-        proc   = 'subprocess' if self._est_kwargs.get('use_subprocess') else 'in-process'
-        title = f"Rigorous Optimization — {model} | {method} | {proc}"
+        title = f"Rigorous Optimization — {model} | {method}"
         if self._session_tag:
             title += f"  [{self._session_tag}]"
         win.title(title)
@@ -204,13 +203,11 @@ class RigorousView:
 
     def _launch(self):
         try:
-            use_subprocess  = self._est_kwargs.get('use_subprocess', False)
             pipeline_recipe = self._est_kwargs.get('pipeline_recipe', None)
             method = (pipeline_recipe or {}).get('method', 'BH').upper()
 
             run_info = self._decomp_for_opt.optimize_rigorously(
                 trimmed_ssd=self._trimmed,
-                in_process=not use_subprocess,
                 async_=True,
                 monitor=False,
                 method=method,

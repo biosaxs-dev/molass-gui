@@ -1,4 +1,4 @@
-"""UpgradedView — Phase 4: upgraded plot_components + method/subprocess → RigorousView."""
+"""UpgradedView — Phase 4: upgraded plot_components + method → RigorousView."""
 import tkinter as tk
 from tkinter import ttk
 
@@ -59,7 +59,7 @@ class UpgradedView:
         win.title(title)
         win.protocol("WM_DELETE_WINDOW", self._app_root.close_session)
 
-        # Header: method + subprocess + Rigorous button
+        # Header: method + Rigorous button
         hdr = ttk.Frame(win, padding=(8, 4))
         hdr.pack(fill=tk.X)
 
@@ -67,10 +67,6 @@ class UpgradedView:
         self._method_var = tk.StringVar(value='BH')
         ttk.Combobox(hdr, textvariable=self._method_var, values=_METHOD_LABELS,
                      state='readonly', width=8).pack(side=tk.LEFT, padx=4)
-
-        self._subprocess_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(hdr, text="Use subprocess",
-                        variable=self._subprocess_var).pack(side=tk.LEFT, padx=12)
 
         self._rig_btn = ttk.Button(hdr, text="Rigorous Optimization\u2026",
                                    command=self._proceed_rigorous, style="Accent.TButton")
@@ -130,7 +126,6 @@ class UpgradedView:
         pore_dist     = self._model_info['pore_dist']
         ln_pore_sigma = self._model_info['ln_pore_sigma']
         method        = self._method_var.get().lower()
-        use_subprocess = self._subprocess_var.get()
 
         pipeline_recipe = {
             'num_components': self._nc,
@@ -146,12 +141,10 @@ class UpgradedView:
             pipeline_recipe['ln_pore_sigma'] = ln_pore_sigma
 
         est_kwargs = {
-            'use_subprocess': use_subprocess,
             'pipeline_recipe': pipeline_recipe,
         }
 
         self._ctx.method = method
-        self._ctx.use_subprocess = use_subprocess
         self._ctx.analysis_folder = folder
 
         from molass_gui.rigorous_view import RigorousView
