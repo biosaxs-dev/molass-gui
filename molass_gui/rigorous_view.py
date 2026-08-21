@@ -112,6 +112,9 @@ class RigorousView:
         if self._score is not None:
             self._params_btn.state(["!disabled"])
 
+        ttk.Label(win, text=f"Output: {self._analysis_folder}", foreground="gray",
+                  padding=(8, 0)).pack(fill=tk.X, anchor=tk.W)
+
         # 5-panel figure: top 3 panels + Function SV row + Rg Values row
         self._fig = plt.figure(figsize=(18, 8.0))
         gs = gridspec.GridSpec(3, 3, figure=self._fig,
