@@ -24,7 +24,7 @@ class UpgradedView:
         model_info : dict
             Keys: model, pore_dist, ln_pore_sigma.
         ctx : SessionContext
-            Accumulated GUI choices, for "Continue in Notebook…".
+            Accumulated GUI choices, for "Export to Notebook…".
         parent : tk widget or None
         app_root : App or None
             Root window; its close_session() tears down the whole session.
@@ -78,8 +78,8 @@ class UpgradedView:
         self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
                                       command=self._show_parameters, state="disabled")
         self._params_btn.pack(side=tk.RIGHT, padx=8)
-        ttk.Button(hdr, text="Continue in Notebook\u2026",
-                  command=self._continue_in_notebook).pack(side=tk.RIGHT, padx=8)
+        ttk.Button(hdr, text="Export to Notebook\u2026",
+                  command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
         if self._rgcurve is not None:
             self._params_btn.state(["!disabled"])
         self._status_var = tk.StringVar(value="")
@@ -110,7 +110,7 @@ class UpgradedView:
     def _show_parameters(self):
         show_parameters_lazy(self, self._win, self._status_var, self._decomp, self._trimmed)
 
-    def _continue_in_notebook(self):
+    def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
         export_and_open(self._ctx, self._win)
 

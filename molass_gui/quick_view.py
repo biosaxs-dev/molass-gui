@@ -67,8 +67,8 @@ class QuickView:
         self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
                                       command=self._show_parameters, state="disabled")
         self._params_btn.pack(side=tk.RIGHT, padx=8)
-        ttk.Button(hdr, text="Continue in Notebook\u2026",
-                  command=self._continue_in_notebook).pack(side=tk.RIGHT, padx=8)
+        ttk.Button(hdr, text="Export to Notebook\u2026",
+                  command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
             side=tk.LEFT, padx=8)
@@ -111,7 +111,7 @@ class QuickView:
         # for reuse by UpgradedView on the Skip path (same decomp, no rebuild).
         show_parameters_lazy(self, self._win, self._status_var, self._decomp, self._trimmed)
 
-    def _continue_in_notebook(self):
+    def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
         export_and_open(self._ctx, self._win)
 

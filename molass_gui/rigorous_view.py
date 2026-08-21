@@ -29,7 +29,7 @@ class RigorousView:
         analysis_folder : str
             Output folder for optimization results.
         ctx : SessionContext or None
-            Accumulated GUI choices, for "Continue in Notebook…".
+            Accumulated GUI choices, for "Export to Notebook…".
         parent : tk widget or None
         app_root : App or None
             Root window; its close_session() tears down the whole session.
@@ -107,8 +107,8 @@ class RigorousView:
                                       command=self._show_parameters, state="disabled")
         self._params_btn.pack(side=tk.RIGHT, padx=8)
         if self._ctx is not None:
-            ttk.Button(hdr, text="Continue in Notebook\u2026",
-                      command=self._continue_in_notebook).pack(side=tk.RIGHT, padx=8)
+            ttk.Button(hdr, text="Export to Notebook\u2026",
+                      command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
         if self._score is not None:
             self._params_btn.state(["!disabled"])
 
@@ -193,7 +193,7 @@ class RigorousView:
         show_parameters_lazy(self, self._win, self._status_var, self._decomp_for_opt,
                              self._trimmed, params=params)
 
-    def _continue_in_notebook(self):
+    def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
         export_and_open(self._ctx, self._win)
 
