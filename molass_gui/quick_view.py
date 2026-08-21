@@ -116,6 +116,12 @@ class QuickView:
         export_and_open(self._ctx, self._win)
 
     def _skip(self):
+        # Unlike _upgrade(), this work is synchronous (no background thread), so
+        # the disabled state must be forced onto screen with update_idletasks()
+        # before proceeding -- otherwise Tk never gets an idle moment to repaint
+        # it until UpgradedView is already done, making the click look ignored.
+        self._action_btn.state(["disabled"])
+        self._win.update_idletasks()
         model_info = {'model': 'egh', 'pore_dist': None, 'ln_pore_sigma': None}
         self._ctx.model_info = model_info
         from molass_gui.upgraded_view import UpgradedView

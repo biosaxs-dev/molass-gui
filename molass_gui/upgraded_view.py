@@ -127,6 +127,14 @@ class UpgradedView:
         ln_pore_sigma = self._model_info['ln_pore_sigma']
         method        = self._method_var.get().lower()
 
+        # RigorousView(...).show() below runs synchronously (no background
+        # thread), so the disabled state must be forced onto screen with
+        # update_idletasks() -- otherwise Tk never gets an idle moment to
+        # repaint it until RigorousView is already done, making the click
+        # look ignored (same fix as QuickView._skip()).
+        self._rig_btn.state(["disabled"])
+        self._win.update_idletasks()
+
         pipeline_recipe = {
             'num_components': self._nc,
             'model': model_key,
