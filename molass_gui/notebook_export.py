@@ -72,8 +72,12 @@ def build_notebook(ctx):
         # exported notebook now get the same subprocess+auto-recipe behavior "for
         # free" from the library default -- see
         # molass-library/Copilot/refactor/DESIGN_default_in_process_reversal.md.
-        # method is only shown when it's a deliberate non-default choice, keeping
-        # the common case (BH) as simple as possible for a general audience.
+        # method is always shown, even for 'BH': it incurs zero learning cost
+        # (the user already saw/chose BH in the GUI's own combobox), so restating
+        # it just makes an already-known fact explicit and reproducible. This
+        # differs from in_process/async_/monitor above, which were never GUI-facing
+        # choices -- surfacing them would require learning a new concept for no
+        # benefit, which is what the "minimal learning cost" rule guards against.
         lines = [
             "# Sibling folder, not the GUI's own analysis_folder -- reusing that path",
             "# exactly can collide with the GUI's own run still using it (optimize_rigorously",
@@ -81,10 +85,7 @@ def build_notebook(ctx):
             f'analysis_folder = r"{ctx.analysis_folder}_notebook"',
             "run_info = decomp.optimize_rigorously(",
             "    trimmed_ssd=trimmed,",
-        ]
-        if ctx.method.upper() != 'BH':
-            lines.append(f"    method={ctx.method.upper()!r},")
-        lines += [
+            f"    method={ctx.method.upper()!r},",
             "    analysis_folder=analysis_folder,",
             ")",
         ]
