@@ -2,7 +2,7 @@
 import os
 import threading
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 
 from molass_gui import recent_folders
 
@@ -35,13 +35,18 @@ class App(tk.Tk):
 
         style.configure('Accent.TButton', background='#2563eb', foreground='white',
                          padding=6)
+        # 'disabled' must precede 'active' -- ttk matches state specs in list
+        # order, and the button is still 'active' (mouse still hovering right
+        # after the click that disabled it) as well as 'disabled' at that
+        # moment, so 'disabled' has to win the match or the background stays
+        # looking enabled even though the text correctly turns gray.
         style.map('Accent.TButton',
-                  background=[('active', '#1d4ed8'), ('disabled', '#93b4f5')])
+                  background=[('disabled', '#93b4f5'), ('active', '#1d4ed8')])
 
         style.configure('Danger.TButton', background='#dc2626', foreground='white',
                          padding=6)
         style.map('Danger.TButton',
-                  background=[('active', '#b91c1c'), ('disabled', '#eba6a6')])
+                  background=[('disabled', '#eba6a6'), ('active', '#b91c1c')])
 
     def _build_ui(self):
         f = ttk.Frame(self, padding=16)
@@ -108,7 +113,11 @@ class App(tk.Tk):
     def _run(self):
         folder = self._folder_var.get().strip()
         if not folder:
-            self._status_var.set("Please select a data folder first.")
+            # A status-label update alone is too easy to miss (small gray text
+            # right below the button just clicked) -- a modal prompt guarantees
+            # the user notices nothing was loaded.
+            messagebox.showwarning("No Folder Selected",
+                                    "Please select a data folder before clicking Load.")
             return
 
         self._btn.state(["disabled"])
