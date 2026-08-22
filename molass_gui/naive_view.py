@@ -58,12 +58,27 @@ class NaiveView:
         def worker():
             try:
                 corrected = self._trimmed.corrected_copy()
-                decomp = corrected.quick_decomposition(num_components=nc)
+                # Highly-overlapping peaks (e.g. SAMPLE4) make the default
+                # greedy peak-recognition unstable; recommend_decomposition_options()
+                # detects this via EGH peeling -- but only at the component count
+                # IT finds on its own. Forcing more components than that (e.g. nc=3
+                # when auto-detection only distinguishes 2) is itself the unstable
+                # case -- SAMPLE4's 3rd component is invisible to auto-detection but
+                # still needs proportional slicing, not the greedy default.
+                auto_opts = corrected.recommend_decomposition_options()
+                auto_nc = auto_opts.get('num_components', nc)
+                use_proportions = 'proportions' in auto_opts or nc > auto_nc
+                if use_proportions:
+                    decomp = corrected.quick_decomposition(num_components=nc, proportions=[1] * nc)
+                else:
+                    decomp = corrected.quick_decomposition(num_components=nc)
 
                 def on_main():
                     self._decomp_btn.state(["!disabled"])
-                    self._status_var.set("")
+                    self._status_var.set("Used proportional decomposition (high peak overlap detected)"
+                                          if use_proportions else "")
                     self._ctx.num_components = nc
+                    self._ctx.use_proportions = use_proportions
                     from molass_gui.quick_view import QuickView
                     QuickView(decomp, self._trimmed, nc, self._ctx, parent=self._win,
                               app_root=self._app_root, session_tag=self._session_tag).show()

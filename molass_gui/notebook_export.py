@@ -53,9 +53,12 @@ def build_notebook(ctx):
     ))
 
     if ctx.num_components is not None:
+        proportions_kwarg = (f", proportions={[1] * ctx.num_components}"
+                             if getattr(ctx, 'use_proportions', False) else "")
         cells.append(_code(
             "corrected = trimmed.corrected_copy()\n"
-            f"decomp = corrected.quick_decomposition(num_components={ctx.num_components})\n"
+            f"decomp = corrected.quick_decomposition(num_components={ctx.num_components}"
+            f"{proportions_kwarg})\n"
             "rgcurve = decomp.get_rg_curve()\n"
             "decomp.plot_components(rgcurve=rgcurve)"
         ))

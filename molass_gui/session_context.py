@@ -17,6 +17,7 @@ class SessionContext:
     def __init__(self, folder):
         self.folder = folder
         self.num_components = None
+        self.use_proportions = None  # True when recommend_decomposition_options() detected overlap
         self.model_info = None       # {'model', 'pore_dist', 'ln_pore_sigma'}
         self.method = None
         self.analysis_folder = None
