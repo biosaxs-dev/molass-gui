@@ -53,6 +53,8 @@ class RigorousView:
         self._stopped = False
         self._niter = 0
         self._method = 'BH'
+        self._num_jobs = max(1, int(est_kwargs.get('num_jobs', 1)))
+        self._job_round = 0
         self._last_sv_len = 0
         self._redraw_event = threading.Event()
 
@@ -209,16 +211,37 @@ class RigorousView:
             pipeline_recipe = self._est_kwargs.get('pipeline_recipe', None)
             method = (pipeline_recipe or {}).get('method', 'BH').upper()
 
-            run_info = self._decomp_for_opt.optimize_rigorously(
-                trimmed_ssd=self._trimmed,
-                async_=True,
-                monitor=False,
-                method=method,
-                analysis_folder=self._analysis_folder,
-                pipeline_recipe=pipeline_recipe,
-            )
-            self._run_info = run_info
-            self._win.after(0, self._on_started)
+            def _on_round_start(round_idx, num_jobs, run_info):
+                self._job_round = round_idx + 1
+                self._run_info = run_info
+                self._last_sv_len = 0  # fresh SV-history trace for this round
+                if round_idx == 0:
+                    self._win.after(0, self._on_started)
+
+            if self._num_jobs > 1:
+                # Successive-jobs pattern (molass-researcher experiment 36) --
+                # the library owns the loop + reseed; we just observe each round.
+                self._decomp_for_opt.optimize_rigorously(
+                    trimmed_ssd=self._trimmed,
+                    async_=False,
+                    monitor=False,
+                    method=method,
+                    analysis_folder=self._analysis_folder,
+                    pipeline_recipe=pipeline_recipe,
+                    num_jobs=self._num_jobs,
+                    on_round_start=_on_round_start,
+                    stop_check=lambda: self._stopped,
+                )
+            else:
+                run_info = self._decomp_for_opt.optimize_rigorously(
+                    trimmed_ssd=self._trimmed,
+                    async_=True,
+                    monitor=False,
+                    method=method,
+                    analysis_folder=self._analysis_folder,
+                    pipeline_recipe=pipeline_recipe,
+                )
+                _on_round_start(0, 1, run_info)
         except Exception as exc:
             tb = traceback.format_exc()
             log_path = os.path.join(self._analysis_folder, 'molass_gui_error.log')
@@ -310,21 +333,27 @@ class RigorousView:
             if expected:
                 self._niter = expected
 
-            if phase == 'done':
-                self._status_var.set("Done.")
+            job_label = f"Job {self._job_round}/{self._num_jobs}"
+            if phase == 'failed':
+                # live_status() phases are pending/running/completed/failed/unknown
+                # (never 'done' -- the previous check here was dead code).
+                p = getattr(self._run_info, '_subprocess_process', None)
+                rc = p.poll() if p is not None else None
+                stderr_path = os.path.join(
+                    self._run_info.work_folder or '', 'optimizer_stderr.txt')
+                self._status_var.set(
+                    f"{job_label}: subprocess error (exit {rc}) \u2014 see {stderr_path}")
                 self._action_btn.state(["disabled"])
                 self._stopped = True
-            else:
-                p = getattr(self._run_info, '_subprocess_process', None)
-                if p is not None and p.poll() is not None and p.poll() != 0 and not n_callbacks:
-                    stderr_path = os.path.join(
-                        self._run_info.work_folder or '', 'optimizer_stderr.txt')
-                    self._status_var.set(
-                        f"Subprocess error (exit {p.poll()}) \u2014 see {stderr_path}")
+            elif phase == 'completed':
+                if self._job_round >= self._num_jobs:
+                    self._status_var.set(f"{job_label}: Done.")
                     self._action_btn.state(["disabled"])
                     self._stopped = True
                 else:
-                    self._status_var.set(f"Phase: {phase}")
+                    self._status_var.set(f"{job_label} complete \u2014 starting next job\u2026")
+            else:
+                self._status_var.set(f"{job_label}: {phase}")
 
             try:
                 sv_hist = self._run_info.sv_history

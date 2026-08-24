@@ -89,12 +89,30 @@ def build_notebook(ctx):
             "# exactly can collide with the GUI's own run still using it (optimize_rigorously",
             "# would just reconnect to it instead of starting a fresh monitored run).",
             f'analysis_folder = r"{ctx.analysis_folder}_notebook"',
-            "run_info = decomp.optimize_rigorously(",
-            "    trimmed_ssd=trimmed,",
-            f"    method={ctx.method.upper()!r},",
-            "    analysis_folder=analysis_folder,",
-            ")",
         ]
+        num_jobs = getattr(ctx, 'num_jobs', None)
+        if num_jobs and num_jobs > 1:
+            # Successive-jobs pattern (molass-researcher experiment 36): each
+            # round reseeds init_params from the best params found so far.
+            # num_jobs requires async_=False -- the call blocks until every
+            # round completes (see optimize_rigorously docs).
+            lines += [
+                "run_info = decomp.optimize_rigorously(",
+                "    trimmed_ssd=trimmed,",
+                f"    method={ctx.method.upper()!r},",
+                "    analysis_folder=analysis_folder,",
+                f"    num_jobs={num_jobs},",
+                "    async_=False,",
+                ")",
+            ]
+        else:
+            lines += [
+                "run_info = decomp.optimize_rigorously(",
+                "    trimmed_ssd=trimmed,",
+                f"    method={ctx.method.upper()!r},",
+                "    analysis_folder=analysis_folder,",
+                ")",
+            ]
         cells.append(_code("\n".join(lines)))
         cells.append(_code("run_info.live_status()"))
 

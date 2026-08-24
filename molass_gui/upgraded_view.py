@@ -7,6 +7,9 @@ from molass_gui.rgcurve_worker import start_rgcurve_worker
 from molass_gui.params_dialog import show_parameters_lazy
 
 _METHOD_LABELS = ['BH', 'DE']
+# Temporary default while comparing single-job vs successive-jobs behavior
+# (molass-researcher experiment 36) -- revisit before general release.
+_NUM_JOBS_DEFAULT = 10
 
 
 class UpgradedView:
@@ -68,6 +71,11 @@ class UpgradedView:
         ttk.Combobox(hdr, textvariable=self._method_var, values=_METHOD_LABELS,
                      state='readonly', width=8).pack(side=tk.LEFT, padx=4)
 
+        ttk.Label(hdr, text="Jobs:").pack(side=tk.LEFT, padx=(12, 0))
+        self._num_jobs_var = tk.StringVar(value=str(_NUM_JOBS_DEFAULT))
+        ttk.Spinbox(hdr, textvariable=self._num_jobs_var, from_=1, to=50, width=4,
+                   state='readonly').pack(side=tk.LEFT, padx=4)
+
         self._rig_btn = ttk.Button(hdr, text="Rigorous Optimization\u2026",
                                    command=self._proceed_rigorous, style="Accent.TButton")
         self._rig_btn.pack(side=tk.RIGHT, padx=8)
@@ -126,6 +134,7 @@ class UpgradedView:
         pore_dist     = self._model_info['pore_dist']
         ln_pore_sigma = self._model_info['ln_pore_sigma']
         method        = self._method_var.get().lower()
+        num_jobs      = int(self._num_jobs_var.get())
 
         # RigorousView(...).show() below runs synchronously (no background
         # thread), so the disabled state must be forced onto screen with
@@ -157,10 +166,12 @@ class UpgradedView:
 
         est_kwargs = {
             'pipeline_recipe': pipeline_recipe,
+            'num_jobs': num_jobs,
         }
 
         self._ctx.method = method
         self._ctx.analysis_folder = folder
+        self._ctx.num_jobs = num_jobs
 
         from molass_gui.rigorous_view import RigorousView
         RigorousView(self._decomp, self._trimmed, est_kwargs,

@@ -21,3 +21,4 @@ class SessionContext:
         self.model_info = None       # {'model', 'pore_dist', 'ln_pore_sigma'}
         self.method = None
         self.analysis_folder = None
+        self.num_jobs = None  # successive reseeded jobs (molass-researcher experiment 36)
