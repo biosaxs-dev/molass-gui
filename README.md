@@ -33,5 +33,5 @@ py app.py
 ## Requirements
 
 - Python 3.9–3.14
-- [molass](https://pypi.org/project/molass/) ≥ 1.0.6
-- [molass_legacy](https://pypi.org/project/molass_legacy/) ≥ 1.6.14
+- [molass](https://pypi.org/project/molass/) ≥ 1.0.7
+- [molass_legacy](https://pypi.org/project/molass_legacy/) ≥ 1.6.15
