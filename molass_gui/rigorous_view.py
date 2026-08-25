@@ -14,6 +14,8 @@ from molass_gui.params_dialog import show_parameters_lazy
 from molass_gui.plot_components_dialog import show_plot_components_lazy
 from molass_gui.window_tree import register_window_cleanup, register_close_guard
 
+_NUM_JOBS_DEFAULT = 10  # matches upgraded_view.py's New Analysis default
+
 
 class RigorousView:
     def __init__(self, decomp, trimmed, est_kwargs, analysis_folder, ctx=None, parent=None,
@@ -53,6 +55,7 @@ class RigorousView:
         self._run_info = None
         self._stopped = False
         self._niter = 0
+        self._round_base_n = 0  # cumulative evals that existed before this batch of jobs started
         self._method = 'BH'
         self._num_jobs = max(1, int(est_kwargs.get('num_jobs', 1)))
         self._job_round = 0
@@ -140,6 +143,12 @@ class RigorousView:
             self._resume_btn = ttk.Button(hdr, text="Resume", command=self._resume,
                                           style="Accent.TButton")
             self._resume_btn.pack(side=tk.RIGHT, padx=8)
+            self._resume_jobs_var = tk.StringVar(value=str(_NUM_JOBS_DEFAULT))
+            self._resume_jobs_spin = ttk.Spinbox(hdr, textvariable=self._resume_jobs_var,
+                                                 from_=1, to=50, width=4, state='readonly')
+            self._resume_jobs_spin.pack(side=tk.RIGHT, padx=(0, 4))
+            self._resume_jobs_label = ttk.Label(hdr, text="Jobs:")
+            self._resume_jobs_label.pack(side=tk.RIGHT, padx=(8, 0))
         else:
             self._action_btn.pack(side=tk.RIGHT, padx=8)
         self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
@@ -308,6 +317,8 @@ class RigorousView:
         # already-packed buttons and land to their LEFT, reversing the New
         # Analysis order (Plot Components, Show Parameters, Terminate).
         self._resume_btn.pack_forget()
+        self._resume_jobs_spin.pack_forget()
+        self._resume_jobs_label.pack_forget()
         self._params_btn.pack_forget()
         self._plotcomp_btn.pack_forget()
         self._action_btn.pack(side=tk.RIGHT, padx=8)
@@ -315,33 +326,55 @@ class RigorousView:
         self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
         self._action_btn.state(["disabled"])
         self._status_var.set("Starting\u2026")
+        # Read the Spinbox on the main thread -- Tk variables aren't safe to
+        # touch from the background thread that _launch_resume runs on.
+        try:
+            self._resume_jobs_n = max(1, int(self._resume_jobs_var.get()))
+        except (ValueError, tk.TclError):
+            self._resume_jobs_n = 1
         threading.Thread(target=self._launch_resume, daemon=True).start()
 
     def _launch_resume(self):
-        """Continue an existing analysis_folder's job history.
+        """Continue an existing analysis_folder's job history for N more rounds.
 
         clear_jobs=False is required here (not just num_jobs=1's default path):
         Decomposition.optimize_rigorously(num_jobs>1) hardcodes clear_jobs=True
         for its own first round, which would wipe the history we just loaded --
-        so Resume always launches a single round of its own, not the num_jobs loop.
+        so this loops manually (clear_jobs=False every round) instead of
+        delegating to the library's num_jobs loop, per its own docstring's
+        recommendation for exactly this case. _ui_poll already drives the
+        'Job X/Y' display and per-round completion generically off
+        self._job_round/self._num_jobs, same as the New Analysis num_jobs>1 path.
         """
         try:
             pipeline_recipe = self._est_kwargs.get('pipeline_recipe', None)
             method = (pipeline_recipe or {}).get('method', 'BH').upper()
-            run_info = self._decomp_for_opt.optimize_rigorously(
-                trimmed_ssd=self._trimmed,
-                async_=True,
-                monitor=False,
-                method=method,
-                analysis_folder=self._analysis_folder,
-                pipeline_recipe=pipeline_recipe,
-                clear_jobs=False,
-            )
-            self._job_round = 1
-            self._num_jobs = 1
-            self._last_sv_len = 0
-            self._run_info = run_info
-            self._win.after(0, self._on_started)
+            n = getattr(self, '_resume_jobs_n', 1)
+            for round_idx in range(n):
+                if self._stopped:
+                    break
+                run_info = self._decomp_for_opt.optimize_rigorously(
+                    trimmed_ssd=self._trimmed,
+                    async_=True,
+                    monitor=False,
+                    method=method,
+                    analysis_folder=self._analysis_folder,
+                    pipeline_recipe=pipeline_recipe,
+                    clear_jobs=False,
+                )
+                self._job_round = round_idx + 1
+                self._num_jobs = n
+                self._last_sv_len = 0
+                self._run_info = run_info
+                if round_idx == 0:
+                    # Same one-time, whole-batch base capture as _on_round_start
+                    # (New Analysis num_jobs>1 path) -- see comment there.
+                    try:
+                        self._round_base_n = len(run_info.sv_history)
+                    except Exception:
+                        self._round_base_n = 0
+                    self._win.after(0, self._on_started)
+                run_info.wait(timeout=0)
         except Exception as exc:
             tb = traceback.format_exc()
             log_path = os.path.join(self._analysis_folder, 'molass_gui_error.log')
@@ -396,6 +429,14 @@ class RigorousView:
                 self._run_info = run_info
                 self._last_sv_len = 0  # fresh SV-history trace for this round
                 if round_idx == 0:
+                    # sv_history is cumulative across all jobs in analysis_folder --
+                    # capture its length once, before this whole batch's evals land,
+                    # so the plot's ceiling (_ui_poll) spans the entire planned
+                    # batch (all num_jobs rounds), not just the round in progress.
+                    try:
+                        self._round_base_n = len(run_info.sv_history)
+                    except Exception:
+                        self._round_base_n = 0
                     self._win.after(0, self._on_started)
 
             if self._num_jobs > 1:
@@ -511,7 +552,13 @@ class RigorousView:
                 f"Iter: {n_callbacks}/{expected}" if expected else f"Iter: {n_callbacks}")
             self._time_var.set(_fmt_time_info(elapsed_s, n_callbacks, expected))
             if expected:
-                self._niter = expected
+                # Ceiling for the SV/Rg plots' x-axis: history that existed
+                # before this batch started, plus the FULL planned batch
+                # (expected-per-round * all num_jobs rounds) -- not just the
+                # round in progress, so the already-done portion and the
+                # remaining portion are shown to scale (e.g. resuming with as
+                # many jobs as already ran should look like ~half done).
+                self._niter = self._round_base_n + expected * self._num_jobs
 
             job_label = f"Job {self._job_round}/{self._num_jobs}"
             if phase == 'failed':
