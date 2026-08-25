@@ -1,4 +1,4 @@
-"""molass-gui — Phase 1: data folder input."""
+"""molass-gui — New Analysis: data folder input (child of Launcher)."""
 import os
 import threading
 import tkinter as tk
@@ -7,49 +7,21 @@ from tkinter import ttk, filedialog, messagebox
 from molass_gui import recent_folders
 
 
-class App(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Molass")
-        self.resizable(False, False)
-        self._configure_style()
+class App:
+    def __init__(self, parent=None, app_root=None):
+        self._parent = parent
+        self._app_root = app_root
+
+    def show(self):
+        win = tk.Toplevel(self._parent)
+        win.title("Molass — New Analysis")
+        win.resizable(False, False)
+        win.protocol("WM_DELETE_WINDOW", self._app_root.close_session)
+        self._win = win
         self._build_ui()
-        self.protocol("WM_DELETE_WINDOW", self.close_session)
-
-    def close_session(self):
-        """Close every window that belongs to this session in one action --
-        wired to the close button of the root AND every child phase window,
-        so closing any one of them tears down the whole session, not just itself.
-        Confirms first if a long-running job (e.g. rigorous optimization) is
-        active anywhere in the session (see window_tree.confirm_and_close)."""
-        from molass_gui.window_tree import confirm_and_close
-        if confirm_and_close(self):
-            import sys
-            sys.exit(0)
-
-    def _configure_style(self):
-        # 'clam' honors custom background/foreground on TButton, unlike the
-        # native 'vista' theme -- needed for Accent/Danger to actually show.
-        style = ttk.Style(self)
-        style.theme_use('clam')
-
-        style.configure('Accent.TButton', background='#2563eb', foreground='white',
-                         padding=6)
-        # 'disabled' must precede 'active' -- ttk matches state specs in list
-        # order, and the button is still 'active' (mouse still hovering right
-        # after the click that disabled it) as well as 'disabled' at that
-        # moment, so 'disabled' has to win the match or the background stays
-        # looking enabled even though the text correctly turns gray.
-        style.map('Accent.TButton',
-                  background=[('disabled', '#93b4f5'), ('active', '#1d4ed8')])
-
-        style.configure('Danger.TButton', background='#dc2626', foreground='white',
-                         padding=6)
-        style.map('Danger.TButton',
-                  background=[('disabled', '#eba6a6'), ('active', '#b91c1c')])
 
     def _build_ui(self):
-        f = ttk.Frame(self, padding=16)
+        f = ttk.Frame(self._win, padding=16)
         f.pack(fill=tk.BOTH, expand=True)
 
         ttk.Label(f, text="Data folder:").grid(row=0, column=0, sticky=tk.W, pady=4)
@@ -137,25 +109,17 @@ class App(tk.Tk):
                     from molass_gui.session_context import SessionContext
                     ctx = SessionContext(folder)
                     from molass_gui.naive_view import NaiveView
-                    NaiveView(ssd, trimmed, ctx, parent=self, app_root=self,
+                    NaiveView(ssd, trimmed, ctx, parent=self._win, app_root=self._app_root,
                               session_tag=session_tag).show()
-                    self.withdraw()  # unmap, not just minimize -- keeps only NaiveView on the taskbar
+                    self._win.withdraw()  # unmap, not just minimize -- keeps only NaiveView on the taskbar
 
-                self.after(0, on_main)
+                self._win.after(0, on_main)
 
             except Exception as exc:
                 msg = str(exc)
                 def on_error(m=msg):
                     self._status_var.set(f"Error: {m}")
                     self._btn.state(["!disabled"])
-                self.after(0, on_error)
+                self._win.after(0, on_error)
 
         threading.Thread(target=worker, daemon=True).start()
-
-
-def main():
-    App().mainloop()
-
-
-if __name__ == "__main__":
-    main()

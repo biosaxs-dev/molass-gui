@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from molass_gui.params_dialog import show_parameters_lazy
+from molass_gui.plot_components_dialog import show_plot_components_lazy
 from molass_gui.window_tree import register_window_cleanup, register_close_guard
 
 
@@ -57,6 +58,22 @@ class RigorousView:
         self._job_round = 0
         self._last_sv_len = 0
         self._redraw_event = threading.Event()
+        self._result_mode = False
+        self._result_best_params = None
+
+    @classmethod
+    def open_existing(cls, analysis_folder, parent=None, app_root=None, session_tag=None):
+        """Build a RigorousView showing the best completed result for an
+        already-existing analysis_folder (Open Existing Analysis path), with
+        a Resume button in place of the usual auto-start.
+
+        decomp/trimmed/est_kwargs are not known yet at construction time --
+        they get rebuilt from recipe.json inside _prep_main_result().
+        """
+        view = cls(None, None, {}, analysis_folder, ctx=None,
+                   parent=parent, app_root=app_root, session_tag=session_tag)
+        view._result_mode = True
+        return view
 
     def show(self):
         import matplotlib.pyplot as plt
@@ -68,7 +85,10 @@ class RigorousView:
         model  = recipe.get('model', 'egh').upper()
         method = recipe.get('method', 'bh').upper()
         self._method = method
-        title = f"Rigorous Optimization — {model} | {method}"
+        if self._result_mode:
+            title = "Rigorous Optimization Result"
+        else:
+            title = f"Rigorous Optimization — {model} | {method}"
         if self._session_tag:
             title += f"  [{self._session_tag}]"
         win.title(title)
@@ -82,9 +102,13 @@ class RigorousView:
         # Prep phase header (hidden after prep completes)
         self._prep_frame = ttk.Frame(win, padding=(8, 2))
         self._prep_frame.pack(fill=tk.X)
-        self._prep_var = tk.StringVar(value="Computing Rg curve\u2026")
+        if self._result_mode:
+            self._prep_var = tk.StringVar(value="Loading existing analysis\u2026")
+            n_frames = 1
+        else:
+            self._prep_var = tk.StringVar(value="Computing Rg curve\u2026")
+            n_frames = len(self._decomp.ssd.xr.jv)
         ttk.Label(self._prep_frame, textvariable=self._prep_var).pack(side=tk.LEFT)
-        n_frames = len(self._decomp.ssd.xr.jv)
         self._pb = ttk.Progressbar(self._prep_frame, maximum=n_frames, length=300)
         self._pb.pack(side=tk.LEFT, padx=8, fill=tk.X, expand=True)
 
@@ -102,17 +126,34 @@ class RigorousView:
         ttk.Label(hdr, textvariable=self._iter_var).pack(side=tk.LEFT, padx=12)
         self._time_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._time_var, foreground="#555").pack(side=tk.LEFT, padx=4)
+        # Resume/Terminate are two separate, pre-created buttons swapped via
+        # pack()/pack_forget() rather than relabeled with one .configure() call.
+        # Some molass-legacy import triggered during score()'s construction
+        # (python-tkdnd/ttkwidgets globally patches ttk.Widget.configure for
+        # drag-and-drop hooks) makes .configure() crash on ANY button
+        # afterwards with AttributeError('...widgethook_...') -- .state()/
+        # .pack()/.pack_forget() and creating new widgets are all unaffected,
+        # confirmed empirically against a real analysis_folder.
         self._action_btn = ttk.Button(hdr, text="Terminate", command=self._stop,
                                       state='disabled', style="Danger.TButton")
-        self._action_btn.pack(side=tk.RIGHT, padx=8)
+        if self._result_mode:
+            self._resume_btn = ttk.Button(hdr, text="Resume", command=self._resume,
+                                          style="Accent.TButton")
+            self._resume_btn.pack(side=tk.RIGHT, padx=8)
+        else:
+            self._action_btn.pack(side=tk.RIGHT, padx=8)
         self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
                                       command=self._show_parameters, state="disabled")
         self._params_btn.pack(side=tk.RIGHT, padx=8)
+        self._plotcomp_btn = ttk.Button(hdr, text="Plot Components\u2026",
+                                        command=self._plot_components, state="disabled")
+        self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
         if self._ctx is not None:
             ttk.Button(hdr, text="Export to Notebook\u2026",
                       command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
         if self._score is not None:
             self._params_btn.state(["!disabled"])
+            self._plotcomp_btn.state(["!disabled"])
 
         ttk.Label(win, text=f"Output: {self._analysis_folder}", foreground="gray",
                   padding=(8, 0)).pack(fill=tk.X, anchor=tk.W)
@@ -138,7 +179,7 @@ class RigorousView:
         self._canvas = canvas
         self._win = win
 
-        self._win.after(10, self._prep_main)
+        self._win.after(10, self._prep_main_result if self._result_mode else self._prep_main)
 
     # ------------------------------------------------------------------
     # Prep phase
@@ -184,16 +225,155 @@ class RigorousView:
         self._status_var.set(f"Ready \u2014 SV={score.sv:.2f}")
         self._sv_var.set(f"SV: {score.sv:.2f}")
         self._params_btn.state(["!disabled"])
+        self._plotcomp_btn.state(["!disabled"])
         self._optimize()  # auto-start; user can Terminate if needed
+
+    def _prep_main_result(self):
+        """Main-thread: rebuild the pipeline from recipe.json, then draw the
+        best completed result (Open Existing Analysis path). No auto-start --
+        the header's action button offers Resume instead.
+        """
+        try:
+            from molass.Rigorous.RecipeRunner import rebuild_decomposition_from_recipe
+            from molass.Rigorous.RigorousImplement import find_global_best_params
+            from molass.Rigorous.CurrentStateUtils import fv_to_sv
+
+            ssd, trimmed, decomp, recipe = rebuild_decomposition_from_recipe(self._analysis_folder)
+            self._decomp = decomp
+            self._decomp_for_opt = decomp
+            self._trimmed = trimmed
+            self._est_kwargs = {'pipeline_recipe': recipe}
+            self._method = recipe.get('method', 'bh').upper()
+
+            self._prep_var.set("Computing Rg curve\u2026")
+            self._win.update_idletasks()
+            decomp.get_rg_curve()
+
+            self._prep_var.set("Building optimizer\u2026")
+            self._win.update_idletasks()
+            score = decomp.score(trimmed_ssd=trimmed, function_code=recipe.get('function_code'))
+
+            jobs_dir = os.path.join(self._analysis_folder, "optimized", "jobs")
+            best_params, best_fv, best_job = find_global_best_params(jobs_dir, score.init_params)
+            if best_params is None:
+                best_params, best_fv = score.init_params, score.fv
+
+            self._on_prep_done_result(score, best_params, float(fv_to_sv(best_fv)))
+        except Exception as exc:
+            short = str(exc).split('\n')[0][:120]
+            self._prep_var.set(f"Load error: {short}")
+
+    def _on_prep_done_result(self, score, best_params, sv):
+        self._score = score
+        self._result_best_params = best_params
+        self._pb.stop()
+        self._prep_frame.pack_forget()
+        try:
+            opt = score.optimizer
+            opt.objective_func(best_params, plot=True, axis_info=self._axis_info)
+            _retitle_panels(self._ax_uv, self._ax_xr, self._ax_score, sv)
+        except Exception:
+            pass
+        # History panels are disk-based -- RunInfo.reconnect() works without a
+        # live optimizer for sv_history, but rg_history needs optimizer.params_type
+        # (confirmed empirically -- reconnect()'s docstring only promises
+        # sv_history/live_status/load_best), so attach our own real one.
+        try:
+            from molass.Rigorous.RunInfo import RunInfo
+            run_info = RunInfo.reconnect(self._analysis_folder, raise_if_not_found=False)
+            if run_info is not None:
+                run_info.optimizer = score.optimizer
+            sv_hist  = run_info.sv_history if run_info is not None else []
+            raw_hist = run_info.sv_history_raw if run_info is not None else None
+            rg_hist  = run_info.rg_history if run_info is not None else []
+        except Exception:
+            sv_hist, raw_hist, rg_hist = [], None, []
+        _draw_sv_history(self._ax_sv, sv_hist, 0, raw=raw_hist)
+        _draw_rg_history(self._ax_rg, rg_hist, 0)
+        self._canvas.draw()
+        self._status_var.set(f"Loaded \u2014 SV={sv:.2f}")
+        self._sv_var.set(f"SV: {sv:.2f}")
+        self._params_btn.state(["!disabled"])
+        self._plotcomp_btn.state(["!disabled"])
+        # self._resume_btn was created already-enabled in show() -- no further
+        # action needed here (and no .configure()/.state() call on it, since
+        # this runs right after the .configure()-breaking import; see show()).
+
+    def _resume(self):
+        # Swap buttons via pack()/pack_forget(), not .configure() -- see the
+        # comment in show() for why relabeling one button crashes here.
+        # Re-pack _params_btn/_plotcomp_btn too (not just _action_btn):
+        # pack(side=RIGHT) orders slaves by *packing call* order, not creation
+        # order -- without this, _action_btn would be appended after the
+        # already-packed buttons and land to their LEFT, reversing the New
+        # Analysis order (Plot Components, Show Parameters, Terminate).
+        self._resume_btn.pack_forget()
+        self._params_btn.pack_forget()
+        self._plotcomp_btn.pack_forget()
+        self._action_btn.pack(side=tk.RIGHT, padx=8)
+        self._params_btn.pack(side=tk.RIGHT, padx=8)
+        self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
+        self._action_btn.state(["disabled"])
+        self._status_var.set("Starting\u2026")
+        threading.Thread(target=self._launch_resume, daemon=True).start()
+
+    def _launch_resume(self):
+        """Continue an existing analysis_folder's job history.
+
+        clear_jobs=False is required here (not just num_jobs=1's default path):
+        Decomposition.optimize_rigorously(num_jobs>1) hardcodes clear_jobs=True
+        for its own first round, which would wipe the history we just loaded --
+        so Resume always launches a single round of its own, not the num_jobs loop.
+        """
+        try:
+            pipeline_recipe = self._est_kwargs.get('pipeline_recipe', None)
+            method = (pipeline_recipe or {}).get('method', 'BH').upper()
+            run_info = self._decomp_for_opt.optimize_rigorously(
+                trimmed_ssd=self._trimmed,
+                async_=True,
+                monitor=False,
+                method=method,
+                analysis_folder=self._analysis_folder,
+                pipeline_recipe=pipeline_recipe,
+                clear_jobs=False,
+            )
+            self._job_round = 1
+            self._num_jobs = 1
+            self._last_sv_len = 0
+            self._run_info = run_info
+            self._win.after(0, self._on_started)
+        except Exception as exc:
+            tb = traceback.format_exc()
+            log_path = os.path.join(self._analysis_folder, 'molass_gui_error.log')
+            try:
+                os.makedirs(self._analysis_folder, exist_ok=True)
+                with open(log_path, 'w') as f:
+                    f.write(tb)
+            except Exception:
+                pass
+            short = str(exc).split('\n')[0][:120]
+            self._win.after(0, lambda m=short: self._status_var.set(
+                f"Error: {m}  \u2014 see {log_path}"))
 
     def _show_parameters(self):
         # run_info.best_params reflects the live/final run once one exists;
-        # falls back to the initial score's params before/without a run.
+        # falls back to the loaded result's best params (Open Existing
+        # Analysis, before Resume), then the initial score's params.
         params = None
         if self._run_info is not None:
             params = self._run_info.best_params
+        elif self._result_best_params is not None:
+            params = self._result_best_params
         show_parameters_lazy(self, self._win, self._status_var, self._decomp_for_opt,
                              self._trimmed, params=params)
+
+    def _plot_components(self):
+        # Always reloads the latest completed job from disk (not cached) --
+        # the current best may have improved since this was last opened,
+        # especially right after Resume produces new jobs.
+        rgcurve = self._decomp_for_opt.get_rg_curve()
+        show_plot_components_lazy(self._win, self._status_var, self._decomp_for_opt,
+                                  self._analysis_folder, rgcurve=rgcurve)
 
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
