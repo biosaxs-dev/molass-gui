@@ -77,6 +77,15 @@ class ViewAnalysisView:
                 "prior rigorous optimization run.")
             return
 
+        # This work is synchronous (no background thread), so the disabled
+        # state must be forced onto screen with update_idletasks() before
+        # proceeding -- otherwise Tk never gets an idle moment to repaint it
+        # until RigorousView is already up, making the click look ignored
+        # (same pattern as quick_view.py's _skip()).
+        self._btn.state(["disabled"])
+        self._status_var.set("Loading\u2026")
+        self._win.update_idletasks()
+
         recent_folders.add(folder, kind="analysis")
         session_tag = os.path.basename(folder.rstrip("\\/")) or folder
         from molass_gui.rigorous_view import RigorousView
