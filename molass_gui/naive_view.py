@@ -30,6 +30,10 @@ class NaiveView:
         self._nc_var = tk.IntVar(value=3)
         ttk.Spinbox(hdr, from_=1, to=6, textvariable=self._nc_var, width=5).pack(
             side=tk.LEFT, padx=6)
+        ttk.Label(hdr, text="Proportions (optional):").pack(side=tk.LEFT, padx=(12, 0))
+        self._proportions_var = tk.StringVar(value="")
+        ttk.Entry(hdr, textvariable=self._proportions_var, width=18).pack(
+            side=tk.LEFT, padx=6)
         self._decomp_btn = ttk.Button(hdr, text="Decompose", command=self._decompose,
                                      style="Accent.TButton")
         self._decomp_btn.pack(side=tk.LEFT, padx=12)
@@ -52,33 +56,50 @@ class NaiveView:
 
     def _decompose(self):
         nc = self._nc_var.get()
+        custom_text = self._proportions_var.get().strip()
+        custom_proportions = None
+        if custom_text:
+            try:
+                custom_proportions = [float(s) for s in custom_text.split(",")]
+            except ValueError:
+                self._status_var.set("Error: proportions must be comma-separated numbers")
+                return
+            if len(custom_proportions) != nc:
+                self._status_var.set(
+                    f"Error: proportions has {len(custom_proportions)} values, expected {nc}")
+                return
+
         self._decomp_btn.state(["disabled"])
         self._status_var.set("Decomposing…")
 
         def worker():
             try:
                 corrected = self._trimmed.corrected_copy()
-                # Highly-overlapping peaks (e.g. SAMPLE4) make the default
-                # greedy peak-recognition unstable; recommend_decomposition_options()
-                # detects this via EGH peeling -- but only at the component count
-                # IT finds on its own. Forcing more components than that (e.g. nc=3
-                # when auto-detection only distinguishes 2) is itself the unstable
-                # case -- SAMPLE4's 3rd component is invisible to auto-detection but
-                # still needs proportional slicing, not the greedy default.
-                auto_opts = corrected.recommend_decomposition_options()
-                auto_nc = auto_opts.get('num_components', nc)
-                use_proportions = 'proportions' in auto_opts or nc > auto_nc
-                if use_proportions:
-                    decomp = corrected.quick_decomposition(num_components=nc, proportions=[1] * nc)
+                if custom_proportions is not None:
+                    proportions = custom_proportions
+                else:
+                    # Highly-overlapping peaks (e.g. SAMPLE4) make the default
+                    # greedy peak-recognition unstable; recommend_decomposition_options()
+                    # detects this via EGH peeling -- but only at the component count
+                    # IT finds on its own. Forcing more components than that (e.g. nc=3
+                    # when auto-detection only distinguishes 2) is itself the unstable
+                    # case -- SAMPLE4's 3rd component is invisible to auto-detection but
+                    # still needs proportional slicing, not the greedy default.
+                    auto_opts = corrected.recommend_decomposition_options()
+                    auto_nc = auto_opts.get('num_components', nc)
+                    proportions = [1] * nc if ('proportions' in auto_opts or nc > auto_nc) else None
+
+                if proportions is not None:
+                    decomp = corrected.quick_decomposition(num_components=nc, proportions=proportions)
                 else:
                     decomp = corrected.quick_decomposition(num_components=nc)
 
                 def on_main():
                     self._decomp_btn.state(["!disabled"])
-                    self._status_var.set("Used proportional decomposition (high peak overlap detected)"
-                                          if use_proportions else "")
+                    self._status_var.set("Used proportional decomposition"
+                                          if proportions is not None else "")
                     self._ctx.num_components = nc
-                    self._ctx.use_proportions = use_proportions
+                    self._ctx.proportions = proportions
                     from molass_gui.quick_view import QuickView
                     QuickView(decomp, self._trimmed, nc, self._ctx, parent=self._win,
                               app_root=self._app_root, session_tag=self._session_tag).show()

@@ -145,12 +145,12 @@ class UpgradedView:
         self._win.update_idletasks()
 
         decomp_params = {}
-        if getattr(self._ctx, 'use_proportions', False):
-            # Mirrors NaiveView's decomposition choice so the rigorous-optimization
-            # subprocess (RecipeRunner.quick_decomposition(**decomp_params)) re-derives
-            # the same, correctly-initialized decomposition instead of silently
+        if getattr(self._ctx, 'proportions', None):
+            # Mirrors NaiveView's decomposition choice (custom or auto-detected) so the
+            # rigorous-optimization subprocess (RecipeRunner.quick_decomposition(**decomp_params))
+            # re-derives the same, correctly-initialized decomposition instead of silently
             # falling back to the unstable default for high-overlap datasets.
-            decomp_params['proportions'] = [1] * self._nc
+            decomp_params['proportions'] = self._ctx.proportions
         pipeline_recipe = {
             'num_components': self._nc,
             'model': model_key,

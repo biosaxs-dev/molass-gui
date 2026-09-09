@@ -53,8 +53,8 @@ def build_notebook(ctx):
     ))
 
     if ctx.num_components is not None:
-        proportions_kwarg = (f", proportions={[1] * ctx.num_components}"
-                             if getattr(ctx, 'use_proportions', False) else "")
+        proportions = getattr(ctx, 'proportions', None)
+        proportions_kwarg = f", proportions={proportions}" if proportions else ""
         cells.append(_code(
             "corrected = trimmed.corrected_copy()\n"
             f"decomp = corrected.quick_decomposition(num_components={ctx.num_components}"
