@@ -28,10 +28,11 @@ class NaiveView:
         hdr.pack(fill=tk.X)
         ttk.Label(hdr, text="Components:").pack(side=tk.LEFT)
         self._nc_var = tk.IntVar(value=3)
-        ttk.Spinbox(hdr, from_=1, to=6, textvariable=self._nc_var, width=5).pack(
+        ttk.Spinbox(hdr, from_=1, to=10, textvariable=self._nc_var, width=5).pack(
             side=tk.LEFT, padx=6)
         ttk.Label(hdr, text="Proportions (optional):").pack(side=tk.LEFT, padx=(12, 0))
         self._proportions_var = tk.StringVar(value="")
+        self._proportions_var.trace_add("write", self._sync_nc_from_proportions)
         ttk.Entry(hdr, textvariable=self._proportions_var, width=18).pack(
             side=tk.LEFT, padx=6)
         self._decomp_btn = ttk.Button(hdr, text="Decompose", command=self._decompose,
@@ -54,8 +55,22 @@ class NaiveView:
         from molass_gui.notebook_export import export_and_open
         export_and_open(self._ctx, self._win)
 
+    def _sync_nc_from_proportions(self, *_args):
+        # Custom proportions supersedes Components -- reflect its length live,
+        # so the two fields can never silently disagree. Ignored while the
+        # text doesn't yet parse (e.g. mid-edit, trailing comma) rather than
+        # showing an error on every keystroke.
+        text = self._proportions_var.get().strip()
+        if not text:
+            return
+        try:
+            values = [float(s) for s in text.split(",")]
+        except ValueError:
+            return
+        if values:
+            self._nc_var.set(len(values))
+
     def _decompose(self):
-        nc = self._nc_var.get()
         custom_text = self._proportions_var.get().strip()
         custom_proportions = None
         if custom_text:
@@ -64,10 +79,12 @@ class NaiveView:
             except ValueError:
                 self._status_var.set("Error: proportions must be comma-separated numbers")
                 return
-            if len(custom_proportions) != nc:
-                self._status_var.set(
-                    f"Error: proportions has {len(custom_proportions)} values, expected {nc}")
-                return
+
+        # Proportions is authoritative when given -- Components is kept in sync
+        # live by _sync_nc_from_proportions, but re-derive here too so a
+        # mismatch can never actually occur regardless of widget-event timing.
+        nc = len(custom_proportions) if custom_proportions is not None else self._nc_var.get()
+        self._nc_var.set(nc)
 
         self._decomp_btn.state(["disabled"])
         self._status_var.set("Decomposing…")
@@ -77,6 +94,7 @@ class NaiveView:
                 corrected = self._trimmed.corrected_copy()
                 if custom_proportions is not None:
                     proportions = custom_proportions
+                    trust_proportions = True
                 else:
                     # Highly-overlapping peaks (e.g. SAMPLE4) make the default
                     # greedy peak-recognition unstable; recommend_decomposition_options()
@@ -87,7 +105,13 @@ class NaiveView:
                     # still needs proportional slicing, not the greedy default.
                     auto_opts = corrected.recommend_decomposition_options()
                     auto_nc = auto_opts.get('num_components', nc)
-                    proportions = [1] * nc if ('proportions' in auto_opts or nc > auto_nc) else None
+                    needs_fallback = 'proportions' in auto_opts or nc > auto_nc
+                    proportions = [1] * nc if needs_fallback else None
+                    # This equal split is a patch for the peeling algorithm's own
+                    # shortfall, not a choice the user made -- must not silently seed
+                    # a rigorous-stage constraint (the user never asked for this split,
+                    # and it can itself be degenerate, e.g. duplicating the dominant peak).
+                    trust_proportions = not needs_fallback
 
                 if proportions is not None:
                     decomp = corrected.quick_decomposition(num_components=nc, proportions=proportions)
@@ -100,6 +124,7 @@ class NaiveView:
                                           if proportions is not None else "")
                     self._ctx.num_components = nc
                     self._ctx.proportions = proportions
+                    self._ctx.trust_proportions = trust_proportions
                     from molass_gui.quick_view import QuickView
                     QuickView(decomp, self._trimmed, nc, self._ctx, parent=self._win,
                               app_root=self._app_root, session_tag=self._session_tag).show()

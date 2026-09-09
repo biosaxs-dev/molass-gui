@@ -91,6 +91,13 @@ def build_notebook(ctx):
             f'analysis_folder = r"{ctx.analysis_folder}_notebook"',
         ]
         num_jobs = getattr(ctx, 'num_jobs', None)
+        # Honestly re-express the GUI's auto_constraint=False decision as an
+        # explicit constraints=[] here -- pipeline_recipe itself is deliberately
+        # never shown (see the comment block above), so this is the only way
+        # the exported script wouldn't silently pick up the library's own
+        # default auto-applied LumpingConstraint, which the equal-split
+        # fallback proportions (not a user choice) shouldn't seed.
+        constraints_kwarg = ([] if not getattr(ctx, 'trust_proportions', True) else None)
         if num_jobs and num_jobs > 1:
             # Successive-jobs pattern (molass-researcher experiment 36): each
             # round reseeds init_params from the best params found so far.
@@ -103,16 +110,20 @@ def build_notebook(ctx):
                 "    analysis_folder=analysis_folder,",
                 f"    num_jobs={num_jobs},",
                 "    async_=False,",
-                ")",
             ]
+            if constraints_kwarg is not None:
+                lines.append("    constraints=[],  # equal-split fallback proportions -- not user-vouched-for")
+            lines.append(")")
         else:
             lines += [
                 "run_info = decomp.optimize_rigorously(",
                 "    trimmed_ssd=trimmed,",
                 f"    method={ctx.method.upper()!r},",
                 "    analysis_folder=analysis_folder,",
-                ")",
             ]
+            if constraints_kwarg is not None:
+                lines.append("    constraints=[],  # equal-split fallback proportions -- not user-vouched-for")
+            lines.append(")")
         cells.append(_code("\n".join(lines)))
         cells.append(_code("run_info.live_status()"))
 

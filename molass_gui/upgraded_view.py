@@ -158,6 +158,11 @@ class UpgradedView:
             'decomp_params': decomp_params,
             'trim_params': {},
             'baseline_params': {},
+            # False only for the naive-view equal-split fallback (peeling couldn't
+            # resolve as many peaks as requested) -- that split is a patch for the
+            # algorithm's own shortfall, not a user choice, so it must not silently
+            # seed the rigorous-stage collapse-prevention constraint.
+            'auto_constraint': getattr(self._ctx, 'trust_proportions', True),
         }
         if pore_dist is not None:
             pipeline_recipe['pore_dist'] = pore_dist
