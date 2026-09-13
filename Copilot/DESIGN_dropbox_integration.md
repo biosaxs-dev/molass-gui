@@ -41,9 +41,19 @@ already provided via the existing "Browse…"/typed/Recent flow:
   still use the *original* folder path (not the resolved local cache path), so re-runs
   re-trigger the same detection+sync logic and outputs stay colocated with the user's
   real Dropbox-synced folder.
+- **Exported notebook** (`notebook_export.py`): must also resolve via
+  `sync_dropbox_folder`, not embed the raw local path -- otherwise re-running the
+  exported notebook reads directly from the online-only Dropbox folder again,
+  defeating the entire feature. `session_context.to_dropbox_path()` (the same
+  heuristic, extracted to a shared function) is exposed as `ctx.dropbox_path`;
+  `build_notebook()` generates a `sync_dropbox_folder(...)` cell when set. Bonus:
+  this makes the exported notebook portable across machines (Dropbox-relative path,
+  not a machine-specific local mount path).
 
-Implementation: `molass_gui/app.py` (`_run`, `_to_dropbox_path`, `_connect_dropbox_dialog`);
-`molass-library/molass/DataUtils/DropboxSync.py` (`on_status` param on `sync_folder`).
+Implementation: `molass_gui/session_context.py` (`to_dropbox_path()`, `ctx.dropbox_path`);
+`molass_gui/app.py` (`_run`, `_connect_dropbox_dialog`); `molass_gui/notebook_export.py`
+(`build_notebook`); `molass-library/molass/DataUtils/DropboxSync.py` (`on_status` param
+on `sync_folder`).
 
 ---
 

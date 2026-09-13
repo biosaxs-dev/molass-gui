@@ -50,6 +50,19 @@ def build_notebook(ctx):
         f"ssd = SSD(r\"{ctx.folder}\")\n"
         "trimmed = ssd.trimmed_copy()\n"
         "trimmed.plot_compact(baseline=True)"
+    ) if ctx.dropbox_path is None else _code(
+        # Resolve via Dropbox on every run (cheap no-op when unchanged) rather
+        # than baking in the raw local path -- reading that directly would
+        # defeat the whole point of sync_dropbox_folder (repeated re-downloads
+        # from an "online-only" Dropbox-synced folder). Also more portable: a
+        # Dropbox-relative path works on any machine with valid credentials,
+        # unlike a machine-specific local mount path.
+        "from molass.DataObjects import SecSaxsData as SSD\n"
+        "from molass.DataUtils import sync_dropbox_folder\n\n"
+        f"data_folder = sync_dropbox_folder(r\"{ctx.dropbox_path}\")\n"
+        "ssd = SSD(data_folder)\n"
+        "trimmed = ssd.trimmed_copy()\n"
+        "trimmed.plot_compact(baseline=True)"
     ))
 
     if ctx.num_components is not None:

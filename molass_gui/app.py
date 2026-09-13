@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from molass_gui import recent_folders
+from molass_gui.session_context import to_dropbox_path
 
 
 class App:
@@ -87,16 +88,6 @@ class App:
         d = filedialog.askdirectory(title="Select data folder")
         if d:
             self._folder_var.set(d)
-
-    def _to_dropbox_path(self, local_path):
-        # Heuristic (per design doc): the folder is Dropbox-synced if a path
-        # segment literally contains "dropbox" -- everything after that
-        # segment is the Dropbox-API-relative path.
-        parts = [p for p in local_path.replace("\\", "/").split("/") if p]
-        for i, p in enumerate(parts):
-            if "dropbox" in p.lower():
-                return "/" + "/".join(parts[i + 1:])
-        return None
 
     def _connect_dropbox_dialog(self):
         """Blocking one-time OAuth connect flow. Returns True on success."""
@@ -184,7 +175,7 @@ class App:
         def worker():
             actual_folder = folder
             if "dropbox" in folder.lower():
-                dropbox_path = self._to_dropbox_path(folder)
+                dropbox_path = to_dropbox_path(folder)
                 if dropbox_path:
                     try:
                         from molass.DataUtils import sync_dropbox_folder

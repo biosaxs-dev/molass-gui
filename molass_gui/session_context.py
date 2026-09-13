@@ -6,6 +6,24 @@ wizard and full notebook flexibility.
 """
 
 
+def to_dropbox_path(local_path):
+    """Return the Dropbox-API-relative path if local_path looks like a
+    Dropbox-synced folder, else None.
+
+    Heuristic (per Copilot/DESIGN_dropbox_integration.md): a path segment
+    literally containing "dropbox" marks the folder as Dropbox-synced;
+    everything after that segment is the Dropbox-API-relative path. Shared
+    between app.py (load-time sync) and notebook_export.py (exported
+    notebook must also resolve via Dropbox, not read the raw local path
+    directly -- that would defeat the whole point of syncing).
+    """
+    parts = [p for p in local_path.replace("\\", "/").split("/") if p]
+    for i, p in enumerate(parts):
+        if "dropbox" in p.lower():
+            return "/" + "/".join(parts[i + 1:])
+    return None
+
+
 class SessionContext:
     """Accumulates GUI choices as the session progresses.
 
@@ -23,3 +41,9 @@ class SessionContext:
         self.method = None
         self.analysis_folder = None
         self.num_jobs = None  # successive reseeded jobs (molass-researcher experiment 36)
+
+    @property
+    def dropbox_path(self):
+        """Dropbox-API-relative path if self.folder is Dropbox-synced, else None."""
+        return to_dropbox_path(self.folder)
+
