@@ -1,8 +1,8 @@
 # Design: Dropbox Integration for molass-gui
 
-**Status**: Discussion — not yet implemented. Resume here.
+**Status**: Implemented (2026-09-13). See "Final design" below for what shipped.
 
-**Context**: `molass-library` (main repo) now provides `molass.DataUtils.sync_dropbox_folder`
+**Context**: `molass-library` (main repo) provides `molass.DataUtils.sync_dropbox_folder`
 (module: `molass/DataUtils/DropboxSync.py`), which caches a Dropbox folder locally via
 the Dropbox API (bulk zip download, per-file fallback for large folders), avoiding the
 repeated re-downloads that happen when reading directly from a Dropbox-desktop-synced
@@ -12,7 +12,45 @@ repeated re-downloads that happen when reading directly from a Dropbox-desktop-s
 steps specifically so a GUI can drive the OAuth flow with its own dialogs instead of a
 blocking console `input()`.
 
+---
+
+## Final design (superseding the discussion below)
+
+No new "From Dropbox…" button, no dedicated dialog, no new pyproject dependency.
+Dropbox handling is fully implicit, detected only from the folder path the user
+already provided via the existing "Browse…"/typed/Recent flow:
+
+- **Trigger**: in `App._run()`, `"dropbox" in folder.lower()` (case-insensitive
+  substring on the path) — a heuristic, not a hard rule; refine later if needed
+  (e.g. custom-named Dropbox Business folders won't match).
+- **Path conversion**: `App._to_dropbox_path()` finds the path segment containing
+  "dropbox" and returns everything after it, `/`-joined, as the Dropbox-API-relative
+  path (e.g. `C:\Users\me\Dropbox\MOLASS\Data\X` → `/MOLASS/Data/X`).
+- **Credentials missing**: `App._connect_dropbox_dialog()` — a small blocking modal
+  (App Key → "Open Browser…" → paste code → "Connect") shown only at this point, using
+  `DropboxSync.start_authorize/finish_authorize/save_credentials`. Cancelling aborts
+  the load. `dropbox` package not installed → warn once, then proceed with the local
+  path unchanged (no hard dependency added).
+- **Sync + progress**: done inside the existing background worker thread; `on_status`
+  callback (new `molass-library` param) routes progress text into the existing
+  `self._status_var` label via the existing `.after(0, ...)` pattern — no new UI.
+- **Fallback on failure**: any exception from path resolution or `sync_dropbox_folder`
+  (false-positive match, wrong derived path, API error) falls back to using the
+  original local path directly, with a one-line status warning — never blocks the load.
+- **Recent/session identity**: `recent_folders.add(...)` and `SessionContext(...)`
+  still use the *original* folder path (not the resolved local cache path), so re-runs
+  re-trigger the same detection+sync logic and outputs stay colocated with the user's
+  real Dropbox-synced folder.
+
+Implementation: `molass_gui/app.py` (`_run`, `_to_dropbox_path`, `_connect_dropbox_dialog`);
+`molass-library/molass/DataUtils/DropboxSync.py` (`on_status` param on `sync_folder`).
+
+---
+
+## Original discussion (kept for history)
+
 This doc captures the discussion on how `molass-gui` should surface this feature.
+
 
 ---
 
@@ -72,12 +110,18 @@ that module.
 
 ---
 
-## Open question for next session
+## Resolution (2026-09-13)
 
-Confirm (or adjust) the "leaning" choices in points 2–4 above, then implement:
+Point 1 (entry point) was superseded entirely — no separate button/dialog; see
+"Final design" at the top. Points 2 and 3's leanings were adopted as-is (inline
+connect-on-demand, paste-code flow). Point 4 was decided the *opposite* of the
+original leaning: `dropbox` stays optional, not a hard dependency — missing-package
+warns once and falls back to the plain local path. Point 5's `on_status` callback was
+implemented as leaned. Point 6 (Recent Dropbox paths / `kind="dropbox"`) was dropped —
+no longer needed since there's no separate Dropbox path entry to remember; the
+existing single Recent list already covers it.
 
-1. `molass-library`: add `on_status` callback param to `sync_folder()`.
-2. `molass-gui`: new `molass_gui/dropbox_dialog.py` (or similar) with the connect +
-   path-entry flow, wired into `app.py`'s `_build_ui()`.
-3. `molass-gui/pyproject.toml`: `molass[dropbox]>=1.0.9`.
-4. Manual test: fresh machine (no credentials) → connect flow → sync → Load → NaiveView.
+Remaining manual test (not yet run): fresh machine, no credentials, path containing
+"dropbox" → connect flow → sync → Load → NaiveView; then a folder *without* "dropbox"
+in the path to confirm zero behavior change.
+
