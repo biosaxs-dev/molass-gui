@@ -205,7 +205,10 @@ class App:
 
                 def on_main():
                     self._btn.state(["!disabled"])
-                    self._status_var.set("Ready.")
+                    # force a repaint now -- plot_compact() below blocks the mainloop,
+                    # so a plain .set() would never actually appear on screen first
+                    self._status_var.set("Preparing the compact plot…")
+                    self._win.update_idletasks()
                     recent_folders.add(folder)
                     session_tag = os.path.basename(folder.rstrip("\\/")) or folder
                     from molass_gui.session_context import SessionContext
