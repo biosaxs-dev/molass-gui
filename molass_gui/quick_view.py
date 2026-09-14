@@ -3,7 +3,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from molass_gui.plot_embed import embed_plot
+from molass_gui.plot_embed import embed_plot, export_component_data
 from molass_gui.rgcurve_worker import start_rgcurve_worker
 from molass_gui.params_dialog import show_parameters_lazy
 
@@ -69,6 +69,8 @@ class QuickView:
         self._params_btn.pack(side=tk.RIGHT, padx=8)
         ttk.Button(hdr, text="Export to Notebook\u2026",
                   command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
+        ttk.Button(hdr, text="Export Data\u2026",
+                  command=self._export_data).pack(side=tk.RIGHT, padx=8)
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
             side=tk.LEFT, padx=8)
@@ -114,6 +116,9 @@ class QuickView:
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
         export_and_open(self._ctx, self._win)
+
+    def _export_data(self):
+        export_component_data(self._decomp, self._win)
 
     def _skip(self):
         # Unlike _upgrade(), this work is synchronous (no background thread), so
