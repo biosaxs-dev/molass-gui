@@ -158,11 +158,15 @@ class UpgradedView:
             'decomp_params': decomp_params,
             'trim_params': {},
             'baseline_params': {},
-            # False only for the naive-view equal-split fallback (peeling couldn't
-            # resolve as many peaks as requested) -- that split is a patch for the
-            # algorithm's own shortfall, not a user choice, so it must not silently
-            # seed the rigorous-stage collapse-prevention constraint.
-            'auto_constraint': getattr(self._ctx, 'trust_proportions', True),
+            # Always keep the collapse-prevention constraint on; for the naive-view
+            # equal-split fallback (peeling couldn't resolve as many peaks as
+            # requested), loosen it via constraint_weight instead of disabling it
+            # outright -- that split is a patch for the algorithm's own shortfall,
+            # not a user choice, so its positions aren't precisely known, but a
+            # component drifting hundreds of frames is never acceptable either
+            # way (molass-gui#3).
+            'auto_constraint': True,
+            'constraint_weight': getattr(self._ctx, 'constraint_weight', None),
         }
         if pore_dist is not None:
             pipeline_recipe['pore_dist'] = pore_dist

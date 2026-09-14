@@ -3,6 +3,15 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
+# LumpingConstraint's own default (0.2) is calibrated for confident,
+# independently-detected peak positions. When the equal-split fallback fires,
+# a component's "position" is just the centroid of an arbitrary equal-area
+# cut (see molass-library/molass/Decompose/Proportional.py) -- not a real
+# detection. This weight is loose enough to not penalize legitimate
+# refinement near that unconfirmed default, while still blocking gross
+# (500+ frame) drift/collapse. See molass-gui#3.
+FALLBACK_LUMPING_WEIGHT = 0.01
+
 
 class NaiveView:
     def __init__(self, ssd, trimmed, ctx, parent=None, app_root=None, session_tag=None):
@@ -108,9 +117,10 @@ class NaiveView:
                     needs_fallback = 'proportions' in auto_opts or nc > auto_nc
                     proportions = [1] * nc if needs_fallback else None
                     # This equal split is a patch for the peeling algorithm's own
-                    # shortfall, not a choice the user made -- must not silently seed
-                    # a rigorous-stage constraint (the user never asked for this split,
-                    # and it can itself be degenerate, e.g. duplicating the dominant peak).
+                    # shortfall, not a choice the user made -- must not silently pose
+                    # as a validated, precisely-known position. But that doesn't mean
+                    # no constraint should apply: loosen it instead of disabling it
+                    # (molass-gui#3) so gross collapse/drift is still blocked.
                     trust_proportions = not needs_fallback
 
                 if proportions is not None:
@@ -125,6 +135,7 @@ class NaiveView:
                     self._ctx.num_components = nc
                     self._ctx.proportions = proportions
                     self._ctx.trust_proportions = trust_proportions
+                    self._ctx.constraint_weight = None if trust_proportions else FALLBACK_LUMPING_WEIGHT
                     from molass_gui.quick_view import QuickView
                     QuickView(decomp, self._trimmed, nc, self._ctx, parent=self._win,
                               app_root=self._app_root, session_tag=self._session_tag).show()
