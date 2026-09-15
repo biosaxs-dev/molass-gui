@@ -70,12 +70,19 @@ class ViewAnalysisView:
 
         recipe_path = os.path.join(folder, "optimized", "recipe.json")
         if not os.path.isfile(recipe_path):
-            messagebox.showerror(
-                "Not an Analysis Folder",
-                f"No optimized/recipe.json found in:\n{folder}\n\n"
-                "Select the output folder passed as analysis_folder= to a "
-                "prior rigorous optimization run.")
-            return
+            # Common mistake: selected the "optimized" subfolder itself rather than
+            # its parent (the actual analysis_folder) -- recipe.json sits directly
+            # inside it in that case, so this is unambiguous to auto-correct.
+            if os.path.isfile(os.path.join(folder, "recipe.json")):
+                folder = os.path.dirname(folder.rstrip("\\/"))
+                self._folder_var.set(folder)
+            else:
+                messagebox.showerror(
+                    "Not an Analysis Folder",
+                    f"No optimized/recipe.json found in:\n{folder}\n\n"
+                    "Select the output folder passed as analysis_folder= to a "
+                    "prior rigorous optimization run.")
+                return
 
         # This work is synchronous (no background thread), so the disabled
         # state must be forced onto screen with update_idletasks() before
