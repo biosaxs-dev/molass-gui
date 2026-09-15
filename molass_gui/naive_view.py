@@ -21,6 +21,11 @@ class NaiveView:
         self._parent = parent
         self._app_root = app_root
         self._session_tag = session_tag
+        # Filled in by _detect_worker (background thread kicked off from show()) --
+        # cached and reused by _decompose so the GUI's own default matches exactly
+        # what recommend_decomposition() would do, and so it's never recomputed twice.
+        self._corrected = None
+        self._auto_opts = None
 
     def show(self):
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
@@ -36,9 +41,11 @@ class NaiveView:
         hdr = ttk.Frame(win, padding=(8, 4))
         hdr.pack(fill=tk.X)
         ttk.Label(hdr, text="Components:").pack(side=tk.LEFT)
-        self._nc_var = tk.IntVar(value=3)
-        ttk.Spinbox(hdr, from_=1, to=10, textvariable=self._nc_var, width=5).pack(
-            side=tk.LEFT, padx=6)
+        # Placeholder until _detect_worker fills in the recommended value below --
+        # disabled in the meantime so a user can't decompose against the stale guess.
+        self._nc_var = tk.IntVar(value=1)
+        self._nc_spinbox = ttk.Spinbox(hdr, from_=1, to=10, textvariable=self._nc_var, width=5)
+        self._nc_spinbox.pack(side=tk.LEFT, padx=6)
         ttk.Label(hdr, text="Proportions (optional):").pack(side=tk.LEFT, padx=(12, 0))
         self._proportions_var = tk.StringVar(value="")
         self._proportions_var.trace_add("write", self._sync_nc_from_proportions)
@@ -49,8 +56,10 @@ class NaiveView:
         self._decomp_btn.pack(side=tk.LEFT, padx=12)
         ttk.Button(hdr, text="Export to Notebook\u2026",
                   command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
-        self._status_var = tk.StringVar(value="")
+        self._status_var = tk.StringVar(value="Detecting components\u2026")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(side=tk.LEFT)
+        self._nc_spinbox.state(["disabled"])
+        self._decomp_btn.state(["disabled"])
 
         # Show trimmed compact plot with baseline overlay
         result = self._trimmed.plot_compact(baseline=True)
@@ -59,6 +68,36 @@ class NaiveView:
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         NavigationToolbar2Tk(canvas, win).update()
         self._win = win
+
+        threading.Thread(target=self._detect_worker, daemon=True).start()
+
+    def _detect_worker(self):
+        # Runs once per session (result cached in self._corrected/self._auto_opts and
+        # reused by _decompose) -- same auto-detection recommend_decomposition() uses,
+        # so the GUI's own default reproduces exactly what the notebook equivalent would
+        # do instead of an arbitrary fixed guess.
+        try:
+            corrected = self._trimmed.corrected_copy()
+            auto_opts = corrected.recommend_decomposition_options()
+        except Exception as exc:
+            msg = str(exc)
+            def on_error(m=msg):
+                self._status_var.set(f"Auto-detect failed ({m}) -- using manual default")
+                self._nc_var.set(3)
+                self._nc_spinbox.state(["!disabled"])
+                self._decomp_btn.state(["!disabled"])
+            self._win.after(0, on_error)
+            return
+
+        def on_main():
+            self._corrected = corrected
+            self._auto_opts = auto_opts
+            self._nc_var.set(auto_opts.get('num_components', 1))
+            self._status_var.set("")
+            self._nc_spinbox.state(["!disabled"])
+            self._decomp_btn.state(["!disabled"])
+
+        self._win.after(0, on_main)
 
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
@@ -100,7 +139,9 @@ class NaiveView:
 
         def worker():
             try:
-                corrected = self._trimmed.corrected_copy()
+                # Reuse the detection kicked off by show() -- same corrected data and
+                # recommendation, computed once per session instead of on every click.
+                corrected = self._corrected
                 if custom_proportions is not None:
                     proportions = custom_proportions
                     trust_proportions = True
@@ -112,7 +153,7 @@ class NaiveView:
                     # when auto-detection only distinguishes 2) is itself the unstable
                     # case -- SAMPLE4's 3rd component is invisible to auto-detection but
                     # still needs proportional slicing, not the greedy default.
-                    auto_opts = corrected.recommend_decomposition_options()
+                    auto_opts = self._auto_opts
                     auto_nc = auto_opts.get('num_components', nc)
                     needs_fallback = 'proportions' in auto_opts or nc > auto_nc
                     proportions = [1] * nc if needs_fallback else None
