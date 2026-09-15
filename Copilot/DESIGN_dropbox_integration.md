@@ -135,3 +135,107 @@ Remaining manual test (not yet run): fresh machine, no credentials, path contain
 "dropbox" → connect flow → sync → Load → NaiveView; then a folder *without* "dropbox"
 in the path to confirm zero behavior change.
 
+---
+
+## Known issue: possible user-count limitation on the Dropbox app (2026-09-15)
+
+The Dropbox app registered for this integration is named `molass-data-sync`. Shimizu
+tried to open its permissions page (presumably via the Dropbox App Console, to grant
+himself access as a second user/tester) and got an error. The exact error message was
+not captured, but it suggested some kind of limit on the number of users/testers
+allowed on the app.
+
+**Likely cause**: Dropbox apps in **"Development"** mode (the default for newly
+created apps) are restricted to a small number of users (historically capped around
+50, and the app owner must explicitly add each tester's Dropbox account email under
+App Console → Permissions/Development users) before the app is submitted for
+production approval. If `molass-data-sync` is still in Development mode, Shimizu's
+account must be added to that allow-list first, or the cap may already be hit for
+some other reason (e.g. team/business Dropbox restricting third-party app access
+centrally).
+
+**Action items** (not yet done):
+- Re-attempt and capture the exact error text/screenshot when Shimizu next hits it.
+- Check the app's status in the Dropbox App Console (Development vs. Production).
+- If in Development mode, add Shimizu's Dropbox account explicitly as a permitted user.
+- If a hard cap is actually the blocker, consider whether production approval is
+  needed, or whether each collaborator should use their own personal Dropbox API app
+  key/credentials instead of sharing one app (this integration's OAuth design already
+  supports per-user `App Key` entry in the connect dialog, so this is a viable
+  fallback without code changes).
+
+### Coping options, ranked by effort
+
+1. **Add Shimizu as a Development user on the existing app** (cheapest, try first).
+   Dropbox App Console → `molass-data-sync` → Permissions tab → add Shimizu's
+   Dropbox account email under the developer/tester allow-list. Only Takahashi (app
+   owner) can do this. No code or workflow change; fixes it if the app is simply in
+   Development mode with an unregistered-tester restriction.
+
+2. **Reduce the requested scope to "App folder" access** instead of "Full Dropbox".
+   Apps requesting broad/sensitive scopes are the ones Dropbox gates behind a
+   dev-user allow-list or review; an app-folder-scoped app (data lives under
+   `Apps/molass-data-sync/...` in each user's Dropbox) is usually exempt from that
+   restriction entirely. Downside: requires the shared data to actually live inside
+   that per-account app folder, which may mean restructuring how the shared dataset
+   is placed/shared on Dropbox — a real (if one-time) change, not just settings.
+
+3. **Each collaborator registers their own personal Dropbox app/App Key** and uses
+   it with their own account. The connect dialog already asks for an `App Key`
+   per-user (no code change needed) — Shimizu creates a trivial app under his own
+   Dropbox developer account (a few minutes in the App Console), points it at the
+   same shared Dropbox folder path, and authorizes with his own key. Sidesteps the
+   whole "who's allowed to use *this* app" question since he'd own his app. This is
+   the most robust fallback and matches how the OAuth flow was already designed.
+
+4. **Share Takahashi's already-authorized credentials file directly** (fastest
+   unblock, weakest security/hygiene). Copy `~/.molass/dropbox_credentials.json`
+   (contains a refresh token tied to Takahashi's Dropbox identity) to Shimizu's
+   machine. Works immediately with zero Dropbox Console interaction, but all syncs
+   then act as Takahashi's account, and the token is a shared secret between two
+   machines — acceptable only as a short-term stopgap between two trusted
+   collaborators, not a real fix.
+
+5. **Submit the app for Dropbox App Review** to move it to Production and remove
+   any user cap entirely. Correct long-term fix if this integration is expected to
+   grow beyond 2-3 collaborators, but disproportionate effort (privacy policy,
+   review turnaround) for the current two-person use case.
+
+**Recommendation**: try (1) first since it costs nothing; if the cap turns out to be
+scope-related rather than a tester allow-list, fall back to (3) as the durable fix
+without touching `molass-library`/`molass-gui` code at all.
+
+**Resolved (2026-09-15)**: it was option (1) — the App Console had a "Development
+users" cap. Takahashi raised the limit to 500, which should be more than enough
+headroom for the foreseeable collaborator count. Pending confirmation: Shimizu
+retries the connect flow and successfully authorizes.
+
+---
+
+## Feature-flagged behind `--dropbox-support` (2026-09-15)
+
+Until the fix above has been confirmed end-to-end with a second real user, the
+whole feature is suppressed by default rather than silently active for anyone
+whose folder path happens to contain "dropbox":
+
+- New module `molass_gui/feature_flags.py`: module-level
+  `DROPBOX_SUPPORT_ENABLED = False`.
+- `launcher.py` `main()` parses `--dropbox-support` (argparse `store_true`) and
+  sets the flag before `Launcher().mainloop()`.
+- `app.py`'s `_run()`: both the credential-check branch and the worker-thread
+  sync branch are now gated with
+  `feature_flags.DROPBOX_SUPPORT_ENABLED and "dropbox" in folder.lower()`.
+  When disabled, a Dropbox-looking folder path is loaded exactly like any
+  other local path -- no credential prompt, no sync, no status text.
+- `session_context.py`'s `SessionContext.dropbox_path` property returns `None`
+  unconditionally when the flag is off, so `notebook_export.py`'s
+  `build_notebook()` never emits a `sync_dropbox_folder(...)` cell either --
+  load-time and export-time behavior stay consistent.
+- Run with the feature on: `python -m molass_gui.launcher --dropbox-support`
+  (or however the installed console-script entry point is invoked, with the
+  same flag appended).
+
+Once Shimizu's authorization is confirmed working and a bit more real-world
+use has happened, the flag's default can flip to `True` (or be removed
+entirely so the feature is simply always-on again).
+

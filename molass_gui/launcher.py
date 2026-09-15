@@ -78,6 +78,15 @@ class Launcher(tk.Tk):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dropbox-support", action="store_true",
+                        help="Enable Dropbox folder auto-detection/sync (experimental, off by default)")
+    args = parser.parse_args()
+
+    from molass_gui import feature_flags
+    feature_flags.DROPBOX_SUPPORT_ENABLED = args.dropbox_support
+
     Launcher().mainloop()
 
 

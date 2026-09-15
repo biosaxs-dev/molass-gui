@@ -4,7 +4,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from molass_gui import recent_folders
+from molass_gui import feature_flags, recent_folders
 from molass_gui.session_context import to_dropbox_path
 
 
@@ -155,7 +155,7 @@ class App:
                                     "Please select a data folder before clicking Load.")
             return
 
-        if "dropbox" in folder.lower():
+        if feature_flags.DROPBOX_SUPPORT_ENABLED and "dropbox" in folder.lower():
             try:
                 from molass.DataUtils import DropboxSync
                 DropboxSync.load_credentials()
@@ -174,7 +174,7 @@ class App:
 
         def worker():
             actual_folder = folder
-            if "dropbox" in folder.lower():
+            if feature_flags.DROPBOX_SUPPORT_ENABLED and "dropbox" in folder.lower():
                 dropbox_path = to_dropbox_path(folder)
                 if dropbox_path:
                     try:

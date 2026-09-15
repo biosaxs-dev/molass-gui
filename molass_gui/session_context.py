@@ -45,6 +45,15 @@ class SessionContext:
 
     @property
     def dropbox_path(self):
-        """Dropbox-API-relative path if self.folder is Dropbox-synced, else None."""
+        """Dropbox-API-relative path if self.folder is Dropbox-synced, else None.
+
+        Gated behind feature_flags.DROPBOX_SUPPORT_ENABLED so an exported
+        notebook never depends on Dropbox sync unless the GUI itself was run
+        with --dropbox-support (keeps load-time and export-time behavior
+        consistent -- see Copilot/DESIGN_dropbox_integration.md).
+        """
+        from molass_gui import feature_flags
+        if not feature_flags.DROPBOX_SUPPORT_ENABLED:
+            return None
         return to_dropbox_path(self.folder)
 
