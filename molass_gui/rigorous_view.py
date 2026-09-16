@@ -12,6 +12,7 @@ from tkinter import ttk
 
 from molass_gui.params_dialog import show_parameters_lazy
 from molass_gui.plot_components_dialog import show_plot_components_lazy
+from molass_gui.denss_view import show_denss_lazy
 from molass_gui.window_tree import register_window_cleanup, register_close_guard
 
 _NUM_JOBS_DEFAULT = 10  # matches upgraded_view.py's New Analysis default
@@ -157,12 +158,16 @@ class RigorousView:
         self._plotcomp_btn = ttk.Button(hdr, text="Plot Components\u2026",
                                         command=self._plot_components, state="disabled")
         self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
+        self._denss_btn = ttk.Button(hdr, text="Run DENSS\u2026",
+                                     command=self._run_denss, state="disabled")
+        self._denss_btn.pack(side=tk.RIGHT, padx=8)
         if self._ctx is not None:
             ttk.Button(hdr, text="Export to Notebook\u2026",
                       command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
         if self._score is not None:
             self._params_btn.state(["!disabled"])
             self._plotcomp_btn.state(["!disabled"])
+            self._denss_btn.state(["!disabled"])
 
         ttk.Label(win, text=f"Output: {self._analysis_folder}", foreground="gray",
                   padding=(8, 0)).pack(fill=tk.X, anchor=tk.W)
@@ -235,6 +240,7 @@ class RigorousView:
         self._sv_var.set(f"SV: {score.sv:.2f}")
         self._params_btn.state(["!disabled"])
         self._plotcomp_btn.state(["!disabled"])
+        self._denss_btn.state(["!disabled"])
         self._optimize()  # auto-start; user can Terminate if needed
 
     def _prep_main_result(self):
@@ -304,6 +310,7 @@ class RigorousView:
         self._sv_var.set(f"SV: {sv:.2f}")
         self._params_btn.state(["!disabled"])
         self._plotcomp_btn.state(["!disabled"])
+        self._denss_btn.state(["!disabled"])
         # self._resume_btn was created already-enabled in show() -- no further
         # action needed here (and no .configure()/.state() call on it, since
         # this runs right after the .configure()-breaking import; see show()).
@@ -321,9 +328,11 @@ class RigorousView:
         self._resume_jobs_label.pack_forget()
         self._params_btn.pack_forget()
         self._plotcomp_btn.pack_forget()
+        self._denss_btn.pack_forget()
         self._action_btn.pack(side=tk.RIGHT, padx=8)
         self._params_btn.pack(side=tk.RIGHT, padx=8)
         self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
+        self._denss_btn.pack(side=tk.RIGHT, padx=8)
         self._action_btn.state(["disabled"])
         self._status_var.set("Starting\u2026")
         # Read the Spinbox on the main thread -- Tk variables aren't safe to
@@ -407,6 +416,11 @@ class RigorousView:
         rgcurve = self._decomp_for_opt.get_rg_curve()
         show_plot_components_lazy(self._win, self._status_var, self._decomp_for_opt,
                                   self._analysis_folder, rgcurve=rgcurve)
+
+    def _run_denss(self):
+        rgcurve = self._decomp_for_opt.get_rg_curve()
+        show_denss_lazy(self._win, self._status_var, self._decomp_for_opt,
+                        self._analysis_folder, rgcurve=rgcurve)
 
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
