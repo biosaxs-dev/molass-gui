@@ -81,6 +81,9 @@ class DenssDialog:
         init_rg = rgs[best_i] if rgs[best_i] else 30.0
         self._dmax_var = tk.DoubleVar(value=round(init_rg * 3, 1))
         ttk.Entry(sel_frame, textvariable=self._dmax_var, width=8).pack(side=tk.LEFT, padx=8)
+        self._dmax_status_var = tk.StringVar(value="")
+        ttk.Label(sel_frame, textvariable=self._dmax_status_var, foreground="#666").pack(
+            side=tk.LEFT, padx=(4, 0))
 
         out_frame = ttk.Frame(win, padding=(8, 0))
         out_frame.pack(fill=tk.X)
@@ -123,10 +126,50 @@ class DenssDialog:
         self._cancel_btn.pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_row, text="Close", command=win.destroy).pack(side=tk.LEFT, padx=4)
 
+        # instant 3xRg guess is shown above already; refine it in the background since the
+        # DENSS Dmax estimator can take several seconds (see molass-researcher
+        # experiments/39_denss_study/39a_dmax_alpha_estimator.ipynb)
+        self._dmax_gen = 0
+        self._start_dmax_estimate(best_i)
+
     def _on_component_selected(self, event=None):
-        rg = self._rgs[self._combo.current()]
+        i = self._combo.current()
+        rg = self._rgs[i]
         if rg:
             self._dmax_var.set(round(rg * 3, 1))
+        self._start_dmax_estimate(i)
+
+    def _start_dmax_estimate(self, i):
+        """Kick off a background DENSS Dmax estimate for component i, refining the instant
+        3xRg guess above once it completes. Runs off the UI thread since estimate_dmax can
+        take several seconds."""
+        self._dmax_gen += 1
+        gen = self._dmax_gen
+        self._dmax_status_var.set("estimating Dmax\u2026")
+        q, a, e = self._components[i].get_jcurve_array().T
+        threading.Thread(target=self._dmax_worker, args=(gen, q, a, e), daemon=True).start()
+
+    def _dmax_worker(self, gen, q, a, e):
+        import numpy as np
+        from molass.SAXS.DmaxEstimation import estimate_dmax
+        try:
+            mask = (q > 0) & (a > 0)
+            Iq = np.vstack((q[mask], a[mask], e[mask])).T
+            D, _, _ = estimate_dmax(Iq, clean_up=True)
+            result = ("ok", D)
+        except Exception as exc:
+            result = ("error", exc)
+        self._win.after(0, lambda: self._apply_dmax_result(gen, result))
+
+    def _apply_dmax_result(self, gen, result):
+        if gen != self._dmax_gen:
+            return  # a newer component selection has superseded this estimate
+        kind, value = result
+        if kind == "ok":
+            self._dmax_var.set(round(float(value), 1))
+            self._dmax_status_var.set("")
+        else:
+            self._dmax_status_var.set("auto-estimate failed, using 3\u00d7Rg")
 
     def _browse_folder(self):
         folder = filedialog.askdirectory(title="Select output folder", parent=self._win)
