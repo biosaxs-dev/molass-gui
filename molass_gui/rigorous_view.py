@@ -12,6 +12,7 @@ from tkinter import ttk
 
 from molass_gui.params_dialog import show_parameters_lazy
 from molass_gui.plot_components_dialog import show_plot_components_lazy
+from molass_gui.shape_analysis_dialog import show_shape_analysis_lazy
 from molass_gui.denss_view import show_denss_lazy
 from molass_gui.window_tree import register_window_cleanup, register_close_guard
 
@@ -158,6 +159,9 @@ class RigorousView:
         self._plotcomp_btn = ttk.Button(hdr, text="Plot Components\u2026",
                                         command=self._plot_components, state="disabled")
         self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
+        self._shapeanalysis_btn = ttk.Button(hdr, text="Shape Analysis\u2026",
+                                            command=self._shape_analysis, state="disabled")
+        self._shapeanalysis_btn.pack(side=tk.RIGHT, padx=8)
         self._denss_btn = ttk.Button(hdr, text="Run DENSS\u2026",
                                      command=self._run_denss, state="disabled")
         self._denss_btn.pack(side=tk.RIGHT, padx=8)
@@ -167,6 +171,7 @@ class RigorousView:
         if self._score is not None:
             self._params_btn.state(["!disabled"])
             self._plotcomp_btn.state(["!disabled"])
+            self._shapeanalysis_btn.state(["!disabled"])
             self._denss_btn.state(["!disabled"])
 
         ttk.Label(win, text=f"Output: {self._analysis_folder}", foreground="gray",
@@ -240,6 +245,7 @@ class RigorousView:
         self._sv_var.set(f"SV: {score.sv:.2f}")
         self._params_btn.state(["!disabled"])
         self._plotcomp_btn.state(["!disabled"])
+        self._shapeanalysis_btn.state(["!disabled"])
         self._denss_btn.state(["!disabled"])
         self._optimize()  # auto-start; user can Terminate if needed
 
@@ -310,6 +316,7 @@ class RigorousView:
         self._sv_var.set(f"SV: {sv:.2f}")
         self._params_btn.state(["!disabled"])
         self._plotcomp_btn.state(["!disabled"])
+        self._shapeanalysis_btn.state(["!disabled"])
         self._denss_btn.state(["!disabled"])
         # self._resume_btn was created already-enabled in show() -- no further
         # action needed here (and no .configure()/.state() call on it, since
@@ -328,10 +335,12 @@ class RigorousView:
         self._resume_jobs_label.pack_forget()
         self._params_btn.pack_forget()
         self._plotcomp_btn.pack_forget()
+        self._shapeanalysis_btn.pack_forget()
         self._denss_btn.pack_forget()
         self._action_btn.pack(side=tk.RIGHT, padx=8)
         self._params_btn.pack(side=tk.RIGHT, padx=8)
         self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
+        self._shapeanalysis_btn.pack(side=tk.RIGHT, padx=8)
         self._denss_btn.pack(side=tk.RIGHT, padx=8)
         self._action_btn.state(["disabled"])
         self._status_var.set("Starting\u2026")
@@ -416,6 +425,11 @@ class RigorousView:
         rgcurve = self._decomp_for_opt.get_rg_curve()
         show_plot_components_lazy(self._win, self._status_var, self._decomp_for_opt,
                                   self._analysis_folder, rgcurve=rgcurve)
+
+    def _shape_analysis(self):
+        rgcurve = self._decomp_for_opt.get_rg_curve()
+        show_shape_analysis_lazy(self._win, self._status_var, self._decomp_for_opt,
+                                 self._analysis_folder, rgcurve=rgcurve)
 
     def _run_denss(self):
         rgcurve = self._decomp_for_opt.get_rg_curve()
