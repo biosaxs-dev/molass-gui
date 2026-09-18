@@ -1,7 +1,6 @@
 """Shared helper for embedding a matplotlib figure into a Tk window, and replacing an
 already-embedded plot in place (e.g. once a background computation like the Rg curve
 becomes ready and the figure needs to be redrawn with it overlaid)."""
-import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import matplotlib.pyplot as plt
@@ -28,31 +27,27 @@ def embed_plot(win, fig, previous=None):
 def export_component_data(result, parent_win):
     """Write each XR component's jcurve array to '<folder>/component_{i+1}.dat'.
 
-    Works with any object exposing get_xr_components() -- a plain Decomposition
-    (QuickView/UpgradedView) or a rigorous result (Plot Components dialog).
-
-    Same format/convention as the tutorial's "How to Export" section
-    (quick_start.ipynb) -- plain np.savetxt of the (qv, I, error) columns --
-    so users following the tutorial recognize the GUI's output immediately.
+    Works with any object exposing export_xr_components() -- a plain
+    Decomposition (QuickView/UpgradedView) or a rigorous result (Plot
+    Components dialog). Delegates the actual file-writing to
+    ``Decomposition.export_xr_components()`` (same format/convention as the
+    tutorial's "How to Export" section, quick_start.ipynb) so the GUI and
+    scripts/notebooks share one implementation instead of duplicating the
+    ``np.savetxt`` loop.
     """
-    import numpy as np
-
     folder = filedialog.askdirectory(title="Select export folder", parent=parent_win)
     if not folder:
         return
 
     try:
-        components = result.get_xr_components()
-        for i, comp in enumerate(components):
-            path = os.path.join(folder, f"component_{i + 1}.dat")
-            np.savetxt(path, comp.get_jcurve_array())
+        paths = result.export_xr_components(folder)
     except Exception as exc:
         messagebox.showerror("Export failed", str(exc), parent=parent_win)
         return
 
     messagebox.showinfo(
         "Export complete",
-        f"Exported {len(components)} component curve(s) to:\n{folder}",
+        f"Exported {len(paths)} component curve(s) to:\n{folder}",
         parent=parent_win,
     )
 
