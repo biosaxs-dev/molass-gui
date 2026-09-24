@@ -58,6 +58,24 @@ class Launcher(tk.Tk):
         style.map('Danger.TButton',
                   background=[('disabled', '#eba6a6'), ('active', '#b91c1c')])
 
+        # For secondary actions (e.g. QuickView's Ranks "Apply") that shouldn't
+        # be as visually loud as Accent/Danger, but still need a pressed state
+        # that isn't just a grayscale darkening of plain TButton -- easy to
+        # mistake for "disabled" if you don't already know it's a press. A
+        # distinct color family (blue-tinted, not gray) makes "disabled" vs
+        # "being pressed" unambiguous at a glance, same principle as Accent/
+        # Danger above.
+        style.configure('Secondary.TButton', background='#eff6ff', foreground='#1e3a8a',
+                         padding=6)
+        # 'pressed' (mouse button actually held down) must precede 'active'
+        # (just hovering) for the same reason 'disabled' precedes 'active'
+        # above -- both flags are set at once while clicking, and ttk uses the
+        # first matching entry. Without a separate 'pressed' entry, hover and
+        # click looked identical (only one non-normal shade existed).
+        style.map('Secondary.TButton',
+                  background=[('disabled', '#f3f4f6'), ('pressed', '#1e3a8a'), ('active', '#bfdbfe')],
+                  foreground=[('disabled', '#9ca3af'), ('pressed', 'white')])
+
     def _build_ui(self):
         f = ttk.Frame(self, padding=24)
         f.pack(fill=tk.BOTH, expand=True)

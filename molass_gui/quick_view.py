@@ -62,8 +62,17 @@ class QuickView:
         # so the default all-rank-1 behavior is completely unaffected).
         ttk.Label(hdr, text="Ranks (optional):").pack(side=tk.LEFT, padx=(12, 0))
         self._ranks_var = tk.StringVar(value="")
+        self._ranks_var.trace_add('write', self._on_ranks_text_change)
         ttk.Entry(hdr, textvariable=self._ranks_var, width=12).pack(side=tk.LEFT, padx=4)
-        ttk.Button(hdr, text="Apply", command=self._apply_ranks).pack(side=tk.LEFT, padx=(0, 8))
+        # textvariable (not text=) so _apply_ranks() can swap the label via
+        # .set() -- .configure() becomes unsafe on any button once score()'s
+        # legacy import has run (see Show Parameters/_show_parameters below).
+        self._apply_btn_text = tk.StringVar(value="Apply")
+        self._apply_btn = ttk.Button(hdr, textvariable=self._apply_btn_text, command=self._apply_ranks,
+                                     style="Secondary.TButton")
+        self._apply_btn.pack(side=tk.LEFT, padx=(0, 8))
+        # Disabled until the entry has non-empty text -- nothing to apply otherwise.
+        self._apply_btn.state(["disabled"])
 
         self._action_btn = ttk.Button(hdr, text="Skip", command=self._skip,
                                       style="Accent.TButton")
@@ -107,6 +116,12 @@ class QuickView:
 
         start_rgcurve_worker(win, self._decomp, self._rg_var, self._on_rgcurve_ready)
 
+    def _on_ranks_text_change(self, *_):
+        if self._ranks_var.get().strip():
+            self._apply_btn.state(["!disabled"])
+        else:
+            self._apply_btn.state(["disabled"])
+
     def _redraw(self):
         if self._rgcurve is not None:
             result = self._decomp.plot_components(rgcurve=self._rgcurve, rg_cmap='YlGn',
@@ -128,8 +143,19 @@ class QuickView:
         if len(ranks) != nc:
             self._status_var.set(f"Ranks must have {nc} value(s), got {len(ranks)}")
             return
-        self._decomp.update_xr_ranks(ranks)
-        self._redraw()
+        # Real busy feedback (not just the transient pressed-color flash, which
+        # reverts on mouse release before rank-2's Bounded LRF fit even starts):
+        # rank-2 components re-fit synchronously here and can take a moment.
+        self._apply_btn.state(["disabled"])
+        self._apply_btn_text.set("Applying\u2026")
+        self._win.update_idletasks()
+        try:
+            self._decomp.update_xr_ranks(ranks)
+            self._ctx.xr_ranks = ranks
+            self._redraw()
+        finally:
+            self._apply_btn_text.set("Apply")
+            self._apply_btn.state(["!disabled"])
 
     def _on_rgcurve_ready(self, rgcurve):
         self._rgcurve = rgcurve

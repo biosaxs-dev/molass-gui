@@ -492,8 +492,16 @@ class RigorousView:
                         self._analysis_folder, rgcurve=rgcurve, xr_ranks=self._xr_ranks)
 
     def _set_ranks(self):
+        # Prefer an override already chosen via this dialog; otherwise fall
+        # back to whatever ranks the decomp already carries (e.g. propagated
+        # from QuickView's Ranks entry through Skip/Upgrade) so the dialog
+        # reflects the actually-effective setting, not just this view's own
+        # override state.
+        current = self._xr_ranks
+        if current is None:
+            current = getattr(self._decomp_for_opt, 'xr_ranks', None)
         show_set_ranks_lazy(self._win, self._decomp_for_opt.num_components,
-                            self._xr_ranks, self._on_ranks_applied)
+                            current, self._on_ranks_applied)
 
     def _on_ranks_applied(self, ranks):
         self._xr_ranks = ranks

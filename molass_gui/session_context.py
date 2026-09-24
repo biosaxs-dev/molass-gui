@@ -42,6 +42,7 @@ class SessionContext:
         self.method = None
         self.analysis_folder = None
         self.num_jobs = None  # successive reseeded jobs (molass-researcher experiment 36)
+        self.xr_ranks = None  # set via QuickView's Ranks entry (Decomposition.update_xr_ranks)
 
     @property
     def dropbox_path(self):

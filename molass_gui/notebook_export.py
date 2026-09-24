@@ -68,10 +68,13 @@ def build_notebook(ctx):
     if ctx.num_components is not None:
         proportions = getattr(ctx, 'proportions', None)
         proportions_kwarg = f", proportions={proportions}" if proportions else ""
+        ranks_line = (f"decomp.update_xr_ranks({ctx.xr_ranks})\n"
+                     if getattr(ctx, 'xr_ranks', None) is not None else "")
         cells.append(_code(
             "corrected = trimmed.corrected_copy()\n"
             f"decomp = corrected.quick_decomposition(num_components={ctx.num_components}"
             f"{proportions_kwarg})\n"
+            f"{ranks_line}"
             "rgcurve = decomp.get_rg_curve()\n"
             "decomp.plot_components(rgcurve=rgcurve)"
         ))
