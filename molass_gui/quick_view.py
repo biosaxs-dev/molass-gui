@@ -64,6 +64,12 @@ class QuickView:
         self._ranks_var = tk.StringVar(value="")
         self._ranks_var.trace_add('write', self._on_ranks_text_change)
         ttk.Entry(hdr, textvariable=self._ranks_var, width=12).pack(side=tk.LEFT, padx=4)
+        # Only fills the entry (compute_scds()'s SCD -> rank heuristic is a
+        # hint, not automatically applied) -- Apply is still the one action
+        # that actually calls update_xr_ranks(). Computed on demand, not on
+        # every QuickView open, since compute_scds() has real cost and rank-2
+        # cases are rare.
+        ttk.Button(hdr, text="Suggest", command=self._suggest_ranks).pack(side=tk.LEFT, padx=(0, 4))
         # textvariable (not text=) so _apply_ranks() can swap the label via
         # .set() -- .configure() becomes unsafe on any button once score()'s
         # legacy import has run (see Show Parameters/_show_parameters below).
@@ -121,6 +127,31 @@ class QuickView:
             self._apply_btn.state(["!disabled"])
         else:
             self._apply_btn.state(["disabled"])
+
+    def _suggest_ranks(self):
+        # compute_scds() is a real computation (ConcDepend/RgDiffRatios), so
+        # this runs in a background thread rather than on every window open.
+        prev = self._status_var.get()
+        self._status_var.set("Computing suggested ranks\u2026")
+
+        def worker():
+            try:
+                from molass.Backward.RankEstimator import scd_to_rank
+                scds = self._decomp.compute_scds()
+                ranks = [scd_to_rank(s) for s in scds]
+            except Exception as exc:
+                msg = str(exc)
+                self._win.after(0, lambda: self._status_var.set(f"Suggest ranks failed: {msg}"))
+                return
+
+            def on_main():
+                # Only fills the entry -- Apply is still the action that
+                # actually calls update_xr_ranks(); user can edit first.
+                self._ranks_var.set(",".join(str(r) for r in ranks))
+                self._status_var.set(prev)
+            self._win.after(0, on_main)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _redraw(self):
         if self._rgcurve is not None:
