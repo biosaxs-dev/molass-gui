@@ -497,6 +497,13 @@ class RigorousView:
         # from QuickView's Ranks entry through Skip/Upgrade) so the dialog
         # reflects the actually-effective setting, not just this view's own
         # override state.
+        #
+        # General principle (this was a real bug once, see molass-gui#6):
+        # self._xr_ranks is view-level state that SHADOWS decomp.xr_ranks --
+        # whenever GUI state mirrors a library object's own attribute like
+        # this, treat the object's attribute as the single source of truth
+        # and only layer a thin, explicitly-precedenced override on top (as
+        # done here), rather than reading the view's copy alone.
         current = self._xr_ranks
         if current is None:
             current = getattr(self._decomp_for_opt, 'xr_ranks', None)
