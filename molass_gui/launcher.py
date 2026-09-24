@@ -12,10 +12,15 @@ from tkinter import ttk
 class Launcher(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Molass")
+        from molass_gui import get_version
+        self.title("Molass %s" % get_version())
         self.resizable(False, False)
         self._configure_style()
         self._build_ui()
+        self.update_idletasks()
+        # widen if needed so the titlebar text isn't clipped by content width
+        width = max(self.winfo_reqwidth(), 320)
+        self.geometry("%dx%d" % (width, self.winfo_reqheight()))
         self.protocol("WM_DELETE_WINDOW", self.close_session)
 
     def close_session(self):

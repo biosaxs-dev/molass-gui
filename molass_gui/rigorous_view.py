@@ -14,6 +14,7 @@ from molass_gui.params_dialog import show_parameters_lazy
 from molass_gui.plot_components_dialog import show_plot_components_lazy
 from molass_gui.shape_analysis_dialog import show_shape_analysis_lazy
 from molass_gui.denss_view import show_denss_lazy
+from molass_gui.ranks_dialog import show_set_ranks_lazy
 from molass_gui.window_tree import register_window_cleanup, register_close_guard
 
 _NUM_JOBS_DEFAULT = 10  # matches upgraded_view.py's New Analysis default
@@ -65,6 +66,10 @@ class RigorousView:
         self._redraw_event = threading.Event()
         self._result_mode = False
         self._result_best_params = None
+        # Ephemeral per-component rank override (see ranks_dialog.py) -- applied
+        # to whichever result Plot Components/Shape Analysis/Run DENSS next
+        # (re)loads; not written back to recipe.json.
+        self._xr_ranks = None
 
     @classmethod
     def open_existing(cls, analysis_folder, parent=None, app_root=None, session_tag=None):
@@ -131,40 +136,40 @@ class RigorousView:
         ttk.Label(hdr, textvariable=self._iter_var).pack(side=tk.LEFT, padx=12)
         self._time_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._time_var, foreground="#555").pack(side=tk.LEFT, padx=4)
-        # Resume/Terminate are two separate, pre-created buttons swapped via
-        # pack()/pack_forget() rather than relabeled with one .configure() call.
-        # Some molass-legacy import triggered during score()'s construction
-        # (python-tkdnd/ttkwidgets globally patches ttk.Widget.configure for
-        # drag-and-drop hooks) makes .configure() crash on ANY button
-        # afterwards with AttributeError('...widgethook_...') -- .state()/
-        # .pack()/.pack_forget() and creating new widgets are all unaffected,
-        # confirmed empirically against a real analysis_folder.
+        # Terminate <-> Resume are two mutually-exclusive button rows, swapped
+        # via pack()/pack_forget() (never .configure() -- some molass-legacy
+        # import triggered during score()'s construction (python-tkdnd/
+        # ttkwidgets globally patches ttk.Widget.configure for drag-and-drop
+        # hooks) makes .configure() crash on ANY button afterwards with
+        # AttributeError('...widgethook_...'); .state()/.pack()/.pack_forget()
+        # and creating new widgets are all unaffected, confirmed empirically).
+        # Both rows are always created so the SAME swap
+        # (_show_running_controls()/_show_resumable_controls()) works whether
+        # we're entering the resumable state from a fresh Open Existing
+        # Analysis load, or from a live run completing/failing/being
+        # Terminated -- not just once at startup.
         self._action_btn = ttk.Button(hdr, text="Terminate", command=self._stop,
                                       state='disabled', style="Danger.TButton")
-        if self._result_mode:
-            self._resume_btn = ttk.Button(hdr, text="Resume", command=self._resume,
-                                          style="Accent.TButton")
-            self._resume_btn.pack(side=tk.RIGHT, padx=8)
-            self._resume_jobs_var = tk.StringVar(value=str(_NUM_JOBS_DEFAULT))
-            self._resume_jobs_spin = ttk.Spinbox(hdr, textvariable=self._resume_jobs_var,
-                                                 from_=1, to=50, width=4, state='readonly')
-            self._resume_jobs_spin.pack(side=tk.RIGHT, padx=(0, 4))
-            self._resume_jobs_label = ttk.Label(hdr, text="Jobs:")
-            self._resume_jobs_label.pack(side=tk.RIGHT, padx=(8, 0))
-        else:
-            self._action_btn.pack(side=tk.RIGHT, padx=8)
+        self._resume_btn = ttk.Button(hdr, text="Resume", command=self._resume,
+                                      style="Accent.TButton")
+        self._resume_jobs_var = tk.StringVar(value=str(_NUM_JOBS_DEFAULT))
+        self._resume_jobs_spin = ttk.Spinbox(hdr, textvariable=self._resume_jobs_var,
+                                             from_=1, to=50, width=4, state='readonly')
+        self._resume_jobs_label = ttk.Label(hdr, text="Jobs:")
         self._params_btn = ttk.Button(hdr, text="Show Parameters\u2026",
                                       command=self._show_parameters, state="disabled")
-        self._params_btn.pack(side=tk.RIGHT, padx=8)
         self._plotcomp_btn = ttk.Button(hdr, text="Plot Components\u2026",
                                         command=self._plot_components, state="disabled")
-        self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
         self._shapeanalysis_btn = ttk.Button(hdr, text="Shape Analysis\u2026",
                                             command=self._shape_analysis, state="disabled")
-        self._shapeanalysis_btn.pack(side=tk.RIGHT, padx=8)
         self._denss_btn = ttk.Button(hdr, text="Run DENSS\u2026",
                                      command=self._run_denss, state="disabled")
-        self._denss_btn.pack(side=tk.RIGHT, padx=8)
+        self._ranks_btn = ttk.Button(hdr, text="Set Ranks\u2026",
+                                     command=self._set_ranks, state="disabled")
+        if self._result_mode:
+            self._show_resumable_controls()
+        else:
+            self._show_running_controls()
         if self._ctx is not None:
             ttk.Button(hdr, text="Export to Notebook\u2026",
                       command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
@@ -173,6 +178,7 @@ class RigorousView:
             self._plotcomp_btn.state(["!disabled"])
             self._shapeanalysis_btn.state(["!disabled"])
             self._denss_btn.state(["!disabled"])
+            self._ranks_btn.state(["!disabled"])
 
         ttk.Label(win, text=f"Output: {self._analysis_folder}", foreground="gray",
                   padding=(8, 0)).pack(fill=tk.X, anchor=tk.W)
@@ -204,20 +210,26 @@ class RigorousView:
     # Prep phase
 
     def _prep_main(self):
-        """Main-thread: compute Rg curve (usually instant -- cached by QuickView/
-        UpgradedView) then build the optimizer via score().
-
-        Runs synchronously on the main thread rather than a background thread.
-        score()'s construction path goes through legacy code whose thread-safety
-        with the active Tk/matplotlib backend is not guaranteed; running it off
-        the main thread previously crashed the whole process (Tcl_AsyncDelete,
-        molass-gui#1) even after get_rg_curve() itself was confirmed cached.
+        """Main-thread: kick off Rg curve computation in a background thread
+        (same safe queue/after() hand-off as QuickView/UpgradedView's
+        rgcurve_worker -- get_rg_curve() itself has no Tk/matplotlib touches,
+        unlike score(), which stays on the main thread in _on_rg_ready below).
+        Usually an instant cache hit (already computed by QuickView/
+        UpgradedView), but must not assume that -- e.g. Skip/Upgrade always
+        preserve/rebuild xr_ranks now, and a still-running prior worker or a
+        cache miss would otherwise block the whole GUI for the full
+        per-frame Guinier fit.
         """
+        from molass_gui.rgcurve_worker import start_rgcurve_worker
+
+        def _progress(j, n):
+            self._pb['value'] = j
+
+        start_rgcurve_worker(self._win, self._decomp, None, self._on_rg_ready,
+                             progress_cb=_progress)
+
+    def _on_rg_ready(self, rgcurve):
         try:
-            def _rg_cb(rg_buffer, j):
-                self._pb['value'] = j
-                self._win.update_idletasks()
-            self._decomp.get_rg_curve(progress_cb=_rg_cb)
             self._decomp_for_opt = self._decomp
             if self._score is None:
                 self._prep_var.set("Building optimizer\u2026")
@@ -247,17 +259,18 @@ class RigorousView:
         self._plotcomp_btn.state(["!disabled"])
         self._shapeanalysis_btn.state(["!disabled"])
         self._denss_btn.state(["!disabled"])
+        self._ranks_btn.state(["!disabled"])
         self._optimize()  # auto-start; user can Terminate if needed
 
     def _prep_main_result(self):
-        """Main-thread: rebuild the pipeline from recipe.json, then draw the
-        best completed result (Open Existing Analysis path). No auto-start --
-        the header's action button offers Resume instead.
+        """Main-thread: rebuild the pipeline from recipe.json, then kick off
+        Rg curve computation in a background thread (see _prep_main's
+        comment), then draw the best completed result (Open Existing
+        Analysis path). No auto-start -- the header's action button offers
+        Resume instead.
         """
         try:
             from molass.Rigorous.RecipeRunner import rebuild_decomposition_from_recipe
-            from molass.Rigorous.RigorousImplement import find_global_best_params
-            from molass.Rigorous.CurrentStateUtils import fv_to_sv
 
             ssd, trimmed, decomp, recipe = rebuild_decomposition_from_recipe(self._analysis_folder)
             self._decomp = decomp
@@ -268,11 +281,23 @@ class RigorousView:
 
             self._prep_var.set("Computing Rg curve\u2026")
             self._win.update_idletasks()
-            decomp.get_rg_curve()
 
+            from molass_gui.rgcurve_worker import start_rgcurve_worker
+            start_rgcurve_worker(self._win, decomp, None, self._on_rg_ready_result)
+        except Exception as exc:
+            short = str(exc).split('\n')[0][:120]
+            self._prep_var.set(f"Load error: {short}")
+
+    def _on_rg_ready_result(self, rgcurve):
+        try:
+            from molass.Rigorous.RigorousImplement import find_global_best_params
+            from molass.Rigorous.CurrentStateUtils import fv_to_sv
+
+            recipe = self._est_kwargs.get('pipeline_recipe') or {}
             self._prep_var.set("Building optimizer\u2026")
             self._win.update_idletasks()
-            score = decomp.score(trimmed_ssd=trimmed, function_code=recipe.get('function_code'))
+            score = self._decomp.score(trimmed_ssd=self._trimmed,
+                                       function_code=recipe.get('function_code'))
 
             jobs_dir = os.path.join(self._analysis_folder, "optimized", "jobs")
             best_params, best_fv, best_job = find_global_best_params(jobs_dir, score.init_params)
@@ -318,18 +343,17 @@ class RigorousView:
         self._plotcomp_btn.state(["!disabled"])
         self._shapeanalysis_btn.state(["!disabled"])
         self._denss_btn.state(["!disabled"])
+        self._ranks_btn.state(["!disabled"])
         # self._resume_btn was created already-enabled in show() -- no further
         # action needed here (and no .configure()/.state() call on it, since
         # this runs right after the .configure()-breaking import; see show()).
 
-    def _resume(self):
-        # Swap buttons via pack()/pack_forget(), not .configure() -- see the
-        # comment in show() for why relabeling one button crashes here.
-        # Re-pack _params_btn/_plotcomp_btn too (not just _action_btn):
-        # pack(side=RIGHT) orders slaves by *packing call* order, not creation
-        # order -- without this, _action_btn would be appended after the
-        # already-packed buttons and land to their LEFT, reversing the New
-        # Analysis order (Plot Components, Show Parameters, Terminate).
+    def _show_running_controls(self):
+        """Terminate row visible (disabled until _on_started re-enables it);
+        Resume/Jobs hidden. Re-packs _params_btn/_plotcomp_btn/etc together
+        with _action_btn (not just _action_btn alone): pack(side=RIGHT) orders
+        slaves by *packing call* order, not creation order -- packing only one
+        of several buttons would reverse their relative on-screen order."""
         self._resume_btn.pack_forget()
         self._resume_jobs_spin.pack_forget()
         self._resume_jobs_label.pack_forget()
@@ -337,12 +361,41 @@ class RigorousView:
         self._plotcomp_btn.pack_forget()
         self._shapeanalysis_btn.pack_forget()
         self._denss_btn.pack_forget()
+        self._ranks_btn.pack_forget()
         self._action_btn.pack(side=tk.RIGHT, padx=8)
         self._params_btn.pack(side=tk.RIGHT, padx=8)
         self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
         self._shapeanalysis_btn.pack(side=tk.RIGHT, padx=8)
         self._denss_btn.pack(side=tk.RIGHT, padx=8)
+        self._ranks_btn.pack(side=tk.RIGHT, padx=8)
         self._action_btn.state(["disabled"])
+
+    def _show_resumable_controls(self):
+        """Resume/Jobs row visible; Terminate hidden -- the state a live run
+        reaches once terminated/completed/failed, unifying it with the state
+        Open Existing Analysis already starts in, instead of being a dead end
+        that requires closing the window and reloading from disk."""
+        self._action_btn.pack_forget()
+        self._params_btn.pack_forget()
+        self._plotcomp_btn.pack_forget()
+        self._shapeanalysis_btn.pack_forget()
+        self._denss_btn.pack_forget()
+        self._ranks_btn.pack_forget()
+        self._resume_btn.pack(side=tk.RIGHT, padx=8)
+        self._resume_jobs_spin.pack(side=tk.RIGHT, padx=(0, 4))
+        self._resume_jobs_label.pack(side=tk.RIGHT, padx=(8, 0))
+        self._params_btn.pack(side=tk.RIGHT, padx=8)
+        self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
+        self._shapeanalysis_btn.pack(side=tk.RIGHT, padx=8)
+        self._denss_btn.pack(side=tk.RIGHT, padx=8)
+        self._ranks_btn.pack(side=tk.RIGHT, padx=8)
+
+    def _resume(self):
+        # Reset _stopped -- may still be True from a previous terminal state
+        # (completed/failed/Terminated) that led here; _launch_resume/
+        # _watch_tick/_ui_poll all bail out immediately while it's set.
+        self._stopped = False
+        self._show_running_controls()
         self._status_var.set("Starting\u2026")
         # Read the Spinbox on the main thread -- Tk variables aren't safe to
         # touch from the background thread that _launch_resume runs on.
@@ -424,17 +477,29 @@ class RigorousView:
         # especially right after Resume produces new jobs.
         rgcurve = self._decomp_for_opt.get_rg_curve()
         show_plot_components_lazy(self._win, self._status_var, self._decomp_for_opt,
-                                  self._analysis_folder, rgcurve=rgcurve)
+                                  self._analysis_folder, rgcurve=rgcurve,
+                                  xr_ranks=self._xr_ranks)
 
     def _shape_analysis(self):
         rgcurve = self._decomp_for_opt.get_rg_curve()
         show_shape_analysis_lazy(self._win, self._status_var, self._decomp_for_opt,
-                                 self._analysis_folder, rgcurve=rgcurve)
+                                 self._analysis_folder, rgcurve=rgcurve,
+                                 xr_ranks=self._xr_ranks)
 
     def _run_denss(self):
         rgcurve = self._decomp_for_opt.get_rg_curve()
         show_denss_lazy(self._win, self._status_var, self._decomp_for_opt,
-                        self._analysis_folder, rgcurve=rgcurve)
+                        self._analysis_folder, rgcurve=rgcurve, xr_ranks=self._xr_ranks)
+
+    def _set_ranks(self):
+        show_set_ranks_lazy(self._win, self._decomp_for_opt.num_components,
+                            self._xr_ranks, self._on_ranks_applied)
+
+    def _on_ranks_applied(self, ranks):
+        self._xr_ranks = ranks
+        self._status_var.set(
+            f"Ranks set to {ranks} \u2014 applies next time Plot Components/"
+            "Shape Analysis/Run DENSS is (re)opened")
 
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
@@ -598,13 +663,13 @@ class RigorousView:
                     self._run_info.work_folder or '', 'optimizer_stderr.txt')
                 self._status_var.set(
                     f"{job_label}: subprocess error (exit {rc}) \u2014 see {stderr_path}")
-                self._action_btn.state(["disabled"])
                 self._stopped = True
+                self._show_resumable_controls()
             elif phase == 'completed':
                 if self._job_round >= self._num_jobs:
                     self._status_var.set(f"{job_label}: Done.")
-                    self._action_btn.state(["disabled"])
                     self._stopped = True
+                    self._show_resumable_controls()
                 else:
                     self._status_var.set(f"{job_label} complete \u2014 starting next job\u2026")
             else:
@@ -648,8 +713,15 @@ class RigorousView:
                     time.sleep(0.5)
                     if not ri.is_alive:
                         break
-            self._win.after(0, lambda: self._status_var.set("Terminated."))
+            self._win.after(0, self._on_terminated)
         threading.Thread(target=_wait_dead, daemon=True).start()
+
+    def _on_terminated(self):
+        # Only reached once the subprocess is confirmed dead (or was never
+        # live) -- Resume launches a new subprocess against the same
+        # analysis_folder, which must not race a still-live old one.
+        self._status_var.set("Terminated.")
+        self._show_resumable_controls()
 
 
 # ------------------------------------------------------------------

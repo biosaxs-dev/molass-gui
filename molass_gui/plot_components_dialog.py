@@ -11,7 +11,7 @@ from tkinter import messagebox, ttk
 from molass_gui.plot_embed import export_component_data
 
 
-def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=None):
+def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
     """Load the best completed result from *analysis_folder* and show its
     plot_components() figure in a Toplevel dialog.
 
@@ -26,9 +26,13 @@ def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=
     analysis_folder : str
     rgcurve : RgCurve, optional
         Pre-computed Rg curve to avoid redundant Guinier fitting.
+    xr_ranks : list of int, optional
+        Per-component rank override (see RigorousView's "Set Ranks…"); falls
+        back to ``decomp.xr_ranks`` when None (see ``load_rigorous_result``).
     """
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
     from molass.Rigorous.CurrentStateUtils import load_rigorous_result, list_rigorous_jobs
+    from molass_gui.plot_embed import close_dialog_figure
 
     prev = status_var.get()
     status_var.set("Loading current result\u2026")
@@ -52,7 +56,8 @@ def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=
             )
             return
         jobid = min(jobs, key=lambda j: j.best_fv).id
-        result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve)
+        result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve,
+                                      xr_ranks=xr_ranks)
     finally:
         status_var.set(prev)
 
@@ -70,4 +75,6 @@ def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=
     btn_row.pack(pady=8)
     ttk.Button(btn_row, text="Export Data\u2026",
               command=lambda: export_component_data(result, dlg)).pack(side=tk.LEFT, padx=4)
-    ttk.Button(btn_row, text="Close", command=dlg.destroy).pack(side=tk.LEFT, padx=4)
+    _close = lambda: close_dialog_figure(dlg, plot_result.fig)
+    ttk.Button(btn_row, text="Close", command=_close).pack(side=tk.LEFT, padx=4)
+    dlg.protocol("WM_DELETE_WINDOW", _close)

@@ -13,7 +13,7 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 
 
-def show_denss_lazy(win, status_var, decomp, analysis_folder, rgcurve=None):
+def show_denss_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
     """Load the current best result's XR components and open the Run DENSS dialog."""
     from molass.Rigorous.CurrentStateUtils import load_rigorous_result, list_rigorous_jobs
 
@@ -31,7 +31,8 @@ def show_denss_lazy(win, status_var, decomp, analysis_folder, rgcurve=None):
             )
             return
         jobid = min(jobs, key=lambda j: j.best_fv).id
-        result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve)
+        result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve,
+                                      xr_ranks=xr_ranks)
     finally:
         status_var.set(prev)
 

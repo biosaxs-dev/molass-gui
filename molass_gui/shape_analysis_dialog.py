@@ -12,7 +12,7 @@ from tkinter import ttk
 from molass.Rigorous.CurrentStateUtils import load_rigorous_result, list_rigorous_jobs
 
 
-def show_shape_analysis_lazy(win, status_var, decomp, analysis_folder, rgcurve=None):
+def show_shape_analysis_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
     """Load the best completed result from *analysis_folder* and show its
     plot_shape_analysis() figure in a Toplevel dialog.
 
@@ -27,6 +27,8 @@ def show_shape_analysis_lazy(win, status_var, decomp, analysis_folder, rgcurve=N
     analysis_folder : str
     rgcurve : RgCurve, optional
         Pre-computed Rg curve to avoid redundant Guinier fitting.
+    xr_ranks : list of int, optional
+        Per-component rank override, same as show_plot_components_lazy().
     """
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
@@ -48,7 +50,8 @@ def show_shape_analysis_lazy(win, status_var, decomp, analysis_folder, rgcurve=N
             )
             return
         jobid = min(jobs, key=lambda j: j.best_fv).id
-        result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve)
+        result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve,
+                                      xr_ranks=xr_ranks)
     finally:
         status_var.set(prev)
 
@@ -63,4 +66,7 @@ def show_shape_analysis_lazy(win, status_var, decomp, analysis_folder, rgcurve=N
 
     btn_row = ttk.Frame(dlg)
     btn_row.pack(pady=8)
-    ttk.Button(btn_row, text="Close", command=dlg.destroy).pack(side=tk.LEFT, padx=4)
+    from molass_gui.plot_embed import close_dialog_figure
+    _close = lambda: close_dialog_figure(dlg, plot_result.fig)
+    ttk.Button(btn_row, text="Close", command=_close).pack(side=tk.LEFT, padx=4)
+    dlg.protocol("WM_DELETE_WINDOW", _close)

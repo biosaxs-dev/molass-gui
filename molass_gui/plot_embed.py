@@ -1,6 +1,7 @@
 """Shared helper for embedding a matplotlib figure into a Tk window, and replacing an
 already-embedded plot in place (e.g. once a background computation like the Rg curve
 becomes ready and the figure needs to be redrawn with it overlaid)."""
+import gc
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import matplotlib.pyplot as plt
@@ -15,6 +16,14 @@ def embed_plot(win, fig, previous=None):
         old_toolbar.destroy()
         old_canvas.get_tk_widget().destroy()
         plt.close(old_fig)
+        # plt.close() alone leaves the old Figure/Axes/canvas objects alive until
+        # the next cyclic GC pass (reference cycles) -- if that pass is triggered
+        # by allocations on a background thread (e.g. optimize_rigorously()'s
+        # legacy pipeline), the deferred Tk widget teardown runs off the main
+        # thread and crashes the process (Tcl_AsyncDelete). Force it here,
+        # deterministically, on the main thread -- same fix molass-legacy's
+        # Dialog.destroy() applies for the same reason (OurTkinter.py).
+        gc.collect()
 
     canvas = FigureCanvasTkAgg(fig, master=win)
     canvas.draw()
@@ -22,6 +31,16 @@ def embed_plot(win, fig, previous=None):
     toolbar = NavigationToolbar2Tk(canvas, win)
     toolbar.update()
     return canvas, toolbar, fig
+
+
+def close_dialog_figure(dlg, fig):
+    """Close *fig* and force GC before destroying *dlg* -- same rationale as
+    embed_plot()'s gc.collect(): a bare dlg.destroy() leaves the Figure/Axes/
+    canvas object graph (reference cycles) alive until whatever thread next
+    triggers a cyclic GC pass, risking a Tk teardown off the main thread."""
+    plt.close(fig)
+    gc.collect()
+    dlg.destroy()
 
 
 def export_component_data(result, parent_win):

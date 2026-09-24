@@ -177,6 +177,11 @@ class UpgradedView:
             pipeline_recipe['pore_dist'] = pore_dist
         if ln_pore_sigma is not None:
             pipeline_recipe['ln_pore_sigma'] = ln_pore_sigma
+        if getattr(self._decomp, 'xr_ranks', None) is not None:
+            # Set in QuickView (survives Skip/Upgrade -- see
+            # Decomposition.copy_with_new_components()) -- persisted here so
+            # it also survives a later Open Existing Analysis reload.
+            pipeline_recipe['xr_ranks'] = list(self._decomp.xr_ranks)
 
         est_kwargs = {
             'pipeline_recipe': pipeline_recipe,

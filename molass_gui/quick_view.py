@@ -57,6 +57,14 @@ class QuickView:
         ttk.Entry(self._psd_frame, textvariable=self._psd_sigma_var, width=6).pack(
             side=tk.LEFT, padx=4)
 
+        # Ranks -- optional, blank by default (rank-2/interparticle cases are
+        # rare; leaving this untouched never calls update_xr_ranks() at all,
+        # so the default all-rank-1 behavior is completely unaffected).
+        ttk.Label(hdr, text="Ranks (optional):").pack(side=tk.LEFT, padx=(12, 0))
+        self._ranks_var = tk.StringVar(value="")
+        ttk.Entry(hdr, textvariable=self._ranks_var, width=12).pack(side=tk.LEFT, padx=4)
+        ttk.Button(hdr, text="Apply", command=self._apply_ranks).pack(side=tk.LEFT, padx=(0, 8))
+
         self._action_btn = ttk.Button(hdr, text="Skip", command=self._skip,
                                       style="Accent.TButton")
         self._action_btn.pack(side=tk.RIGHT, padx=8)
@@ -99,11 +107,33 @@ class QuickView:
 
         start_rgcurve_worker(win, self._decomp, self._rg_var, self._on_rgcurve_ready)
 
+    def _redraw(self):
+        if self._rgcurve is not None:
+            result = self._decomp.plot_components(rgcurve=self._rgcurve, rg_cmap='YlGn',
+                                                  rg_alpha_by_score=True, rg_alpha_power=2.5)
+        else:
+            result = self._decomp.plot_components()
+        self._plot_state = embed_plot(self._win, result.fig, previous=self._plot_state)
+
+    def _apply_ranks(self):
+        nc = self._decomp.get_num_components()
+        text = self._ranks_var.get().strip()
+        ranks = [1] * nc if not text else None
+        if ranks is None:
+            try:
+                ranks = [int(x) for x in text.split(',')]
+            except ValueError:
+                self._status_var.set("Ranks must be a comma-separated list of integers, e.g. 1,1,2")
+                return
+        if len(ranks) != nc:
+            self._status_var.set(f"Ranks must have {nc} value(s), got {len(ranks)}")
+            return
+        self._decomp.update_xr_ranks(ranks)
+        self._redraw()
+
     def _on_rgcurve_ready(self, rgcurve):
         self._rgcurve = rgcurve
-        result = self._decomp.plot_components(rgcurve=rgcurve, rg_cmap='YlGn',
-                                              rg_alpha_by_score=True, rg_alpha_power=2.5)
-        self._plot_state = embed_plot(self._win, result.fig, previous=self._plot_state)
+        self._redraw()
         self._action_btn.state(["!disabled"])
         self._params_btn.state(["!disabled"])
 
