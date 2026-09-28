@@ -289,6 +289,14 @@ class RigorousView:
             self._est_kwargs = {'pipeline_recipe': recipe}
             self._method = recipe.get('method', 'bh').upper()
 
+            # This analysis already computed and exported its Rg curve to
+            # optimized/rg-curve/ the first time it ran -- reload that instead
+            # of repeating the one-Guinier-fit-per-frame computation.
+            from molass.Rigorous.CurrentStateUtils import try_fast_rg_curve
+            if try_fast_rg_curve(decomp, self._analysis_folder):
+                self._on_rg_ready_result(decomp.get_rg_curve())
+                return
+
             self._prep_var.set("Computing Rg curve\u2026")
             self._win.update_idletasks()
 

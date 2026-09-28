@@ -180,9 +180,14 @@ def build_restore_notebook(analysis_folder):
 
     cells.append(_code(
         "from molass.Rigorous.RecipeRunner import rebuild_decomposition_from_recipe\n"
-        "from molass.Rigorous.RunInfo import RunInfo\n\n"
+        "from molass.Rigorous.RunInfo import RunInfo\n"
+        "from molass.Rigorous.CurrentStateUtils import try_fast_rg_curve\n\n"
         f"analysis_folder = r\"{analysis_folder}\"\n"
-        "ssd, trimmed, decomp, recipe = rebuild_decomposition_from_recipe(analysis_folder)"
+        "ssd, trimmed, decomp, recipe = rebuild_decomposition_from_recipe(analysis_folder)\n"
+        "# Reloads the Rg curve this analysis already exported, instead of\n"
+        "# repeating the one-Guinier-fit-per-frame computation.\n"
+        "if not try_fast_rg_curve(decomp, analysis_folder):\n"
+        "    decomp.get_rg_curve()"
     ))
 
     cells.append(_code(
