@@ -259,7 +259,8 @@ class QuickView:
             except Exception as exc:
                 msg = str(exc)
                 def on_error(m=msg):
-                    self._status_var.set(f"Error: {m}")
+                    from molass_gui.error_dialog import show_error_detail
+                    show_error_detail(self._win, self._status_var, m, title="Upgrade failed")
                     self._action_btn.state(["!disabled"])
                 self._win.after(0, on_error)
 
