@@ -19,6 +19,9 @@ from molass_gui.window_tree import register_window_cleanup, register_close_guard
 
 _NUM_JOBS_DEFAULT = 10  # matches upgraded_view.py's New Analysis default
 
+# recipe/model key -> user-facing name; 'cedm' is an internal name only.
+_MODEL_DISPLAY_NAMES = {'cedm': 'EDM'}
+
 
 class RigorousView:
     def __init__(self, decomp, trimmed, est_kwargs, analysis_folder, ctx=None, parent=None,
@@ -92,7 +95,8 @@ class RigorousView:
 
         win = tk.Toplevel(self._parent)
         recipe = (self._est_kwargs.get('pipeline_recipe') or {})
-        model  = recipe.get('model', 'egh').upper()
+        # 'cedm' is the internal recipe/model key; displayed to users as "EDM".
+        model  = _MODEL_DISPLAY_NAMES.get(recipe.get('model', 'egh'), recipe.get('model', 'egh').upper())
         method = recipe.get('method', 'bh').upper()
         self._method = method
         if self._result_mode:
@@ -173,6 +177,12 @@ class RigorousView:
         if self._ctx is not None:
             ttk.Button(hdr, text="Export to Notebook\u2026",
                       command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
+        elif self._result_mode:
+            # No ctx here (open_existing() never has one) -- this exports a
+            # reconnect-style notebook from analysis_folder instead of
+            # replaying ctx's pipeline choices from scratch.
+            ttk.Button(hdr, text="Export to Notebook\u2026",
+                      command=self._export_restore_to_notebook).pack(side=tk.RIGHT, padx=8)
         if self._score is not None:
             self._params_btn.state(["!disabled"])
             self._plotcomp_btn.state(["!disabled"])
@@ -519,6 +529,10 @@ class RigorousView:
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
         export_and_open(self._ctx, self._win)
+
+    def _export_restore_to_notebook(self):
+        from molass_gui.notebook_export import export_restore_and_open
+        export_restore_and_open(self._analysis_folder, self._win)
 
     # ------------------------------------------------------------------
     # Optimization phase
