@@ -24,7 +24,7 @@ def _code(source):
     return nbf.v4.new_code_cell(source)
 
 
-def _upgrade_call(model_info):
+def _upgrade_call(model_info, target_var):
     model_key = model_info['model']
     pore_dist = model_info.get('pore_dist')
     ln_pore_sigma = model_info.get('ln_pore_sigma')
@@ -33,7 +33,7 @@ def _upgrade_call(model_info):
         kwargs += f", pore_dist={pore_dist!r}"
     if ln_pore_sigma is not None:
         kwargs += f", model_params={{'ln_pore_sigma': {ln_pore_sigma!r}}}"
-    return f"decomp = decomp.upgrade({model_key!r}{kwargs})"
+    return f"{target_var} = decomp.upgrade({model_key!r}{kwargs})"
 
 
 def build_notebook(ctx):
@@ -67,7 +67,10 @@ def build_notebook(ctx):
 
     if ctx.num_components is not None:
         proportions = getattr(ctx, 'proportions', None)
-        proportions_kwarg = f", proportions={proportions}" if proportions else ""
+        # num_components is redundant (and a footgun if hand-edited out of
+        # sync) once proportions is given -- len(proportions) already implies it.
+        components_kwarg = (f"proportions={proportions}" if proportions
+                            else f"num_components={ctx.num_components}")
         source_kwarg = (f", proportions_source={ctx.proportions_source!r}"
                         if getattr(ctx, 'proportions_source', None) else "")
         ranks_line = (f"decomp.update_xr_ranks({ctx.xr_ranks})\n"
@@ -82,18 +85,26 @@ def build_notebook(ctx):
             "rgcurve = corrected.get_rg_curve()"
         ))
         cells.append(_code(
-            f"decomp = corrected.quick_decomposition(num_components={ctx.num_components}"
-            f"{proportions_kwarg}{source_kwarg}, rgcurve=rgcurve)\n"
+            f"decomp = corrected.quick_decomposition({components_kwarg}"
+            f"{source_kwarg}, rgcurve=rgcurve)\n"
             f"{ranks_line}"
             "decomp.plot_components(rgcurve=rgcurve)"
         ))
 
+    # active_var tracks the object downstream cells (score, optimize_rigorously)
+    # should act on -- the upgraded decomposition when a model upgrade ran,
+    # otherwise the plain quick_decomposition result. Kept as a separate
+    # variable from `decomp` (rather than overwriting it) so the pre-upgrade
+    # EGH decomposition stays available for later comparison in the notebook.
+    active_var = "decomp"
     if ctx.model_info is not None and ctx.model_info['model'] != 'egh':
-        cells.append(_code(_upgrade_call(ctx.model_info) + "\ndecomp.plot_components(rgcurve=rgcurve)"))
+        active_var = f"decomp_{ctx.model_info['model']}"
+        cells.append(_code(_upgrade_call(ctx.model_info, active_var)
+                          + f"\n{active_var}.plot_components(rgcurve=rgcurve)"))
 
     if ctx.method is not None:
         cells.append(_code(
-            "score = decomp.score(trimmed_ssd=trimmed)\n"
+            f"score = {active_var}.score(trimmed_ssd=trimmed)\n"
             "score.print_summary()\n"
             "score.plot()"
         ))
@@ -129,7 +140,7 @@ def build_notebook(ctx):
             # num_jobs requires async_=False -- the call blocks until every
             # round completes (see optimize_rigorously docs).
             lines += [
-                "run_info = decomp.optimize_rigorously(",
+                f"run_info = {active_var}.optimize_rigorously(",
                 "    trimmed_ssd=trimmed,",
                 f"    method={ctx.method.upper()!r},",
                 "    analysis_folder=analysis_folder,",
@@ -141,7 +152,7 @@ def build_notebook(ctx):
             lines.append(")")
         else:
             lines += [
-                "run_info = decomp.optimize_rigorously(",
+                f"run_info = {active_var}.optimize_rigorously(",
                 "    trimmed_ssd=trimmed,",
                 f"    method={ctx.method.upper()!r},",
                 "    analysis_folder=analysis_folder,",
