@@ -51,6 +51,11 @@ class NaiveView:
         self._proportions_var.trace_add("write", self._sync_nc_from_proportions)
         ttk.Entry(hdr, textvariable=self._proportions_var, width=18).pack(
             side=tk.LEFT, padx=6)
+        # proportions_source only affects the proportions path (see molass-library
+        # quick_decomposition's proportions_source kwarg) -- hidden (not just disabled)
+        # until proportions is non-empty, shown/hidden by _sync_nc_from_proportions.
+        self._proportions_source_var = tk.BooleanVar(value=False)  # False='xr' (default), True='uv'
+        self._on_uv_check = ttk.Checkbutton(hdr, text="on UV", variable=self._proportions_source_var)
         self._decomp_btn = ttk.Button(hdr, text="Decompose", command=self._decompose,
                                      style="Accent.TButton")
         self._decomp_btn.pack(side=tk.LEFT, padx=12)
@@ -109,6 +114,13 @@ class NaiveView:
         # text doesn't yet parse (e.g. mid-edit, trailing comma) rather than
         # showing an error on every keystroke.
         text = self._proportions_var.get().strip()
+        # before= pins the checkbox's position regardless of pack() call order --
+        # it's shown/hidden repeatedly as the user types, so relying on call order
+        # alone would drift it to the end of the LEFT stack after the first toggle.
+        if text:
+            self._on_uv_check.pack(side=tk.LEFT, padx=(0, 6), before=self._decomp_btn)
+        else:
+            self._on_uv_check.pack_forget()
         if not text:
             return
         try:
@@ -164,8 +176,13 @@ class NaiveView:
                     # (molass-gui#3) so gross collapse/drift is still blocked.
                     trust_proportions = not needs_fallback
 
+                # on-UV checkbox only ever applies to a user-typed proportions list --
+                # not the equal-split fallback, which is already flagged untrusted below.
+                proportions_source = ('uv' if proportions is not None and custom_proportions is not None
+                                       and self._proportions_source_var.get() else None)
                 if proportions is not None:
-                    decomp = corrected.quick_decomposition(num_components=nc, proportions=proportions)
+                    extra = {'proportions_source': proportions_source} if proportions_source else {}
+                    decomp = corrected.quick_decomposition(num_components=nc, proportions=proportions, **extra)
                 else:
                     decomp = corrected.quick_decomposition(num_components=nc)
 
@@ -175,6 +192,7 @@ class NaiveView:
                                           if proportions is not None else "")
                     self._ctx.num_components = nc
                     self._ctx.proportions = proportions
+                    self._ctx.proportions_source = proportions_source
                     self._ctx.trust_proportions = trust_proportions
                     self._ctx.constraint_weight = None if trust_proportions else FALLBACK_LUMPING_WEIGHT
                     from molass_gui.quick_view import QuickView

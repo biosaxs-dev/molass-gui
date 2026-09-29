@@ -36,6 +36,7 @@ class SessionContext:
         self.folder = folder
         self.num_components = None
         self.proportions = None  # actual proportions list used (custom or auto), or None for default decomposition
+        self.proportions_source = None  # 'uv' if the "on UV" checkbox was checked, else None (library default 'xr')
         self.trust_proportions = True  # False only for the GUI's own low-confidence equal-split fallback
         self.constraint_weight = None  # LumpingConstraint weight override; None = library default (see molass-gui#3)
         self.model_info = None       # {'model', 'pore_dist', 'ln_pore_sigma'}
