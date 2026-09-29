@@ -70,12 +70,19 @@ def build_notebook(ctx):
         proportions_kwarg = f", proportions={proportions}" if proportions else ""
         ranks_line = (f"decomp.update_xr_ranks({ctx.xr_ranks})\n"
                      if getattr(ctx, 'xr_ranks', None) is not None else "")
+        # rgcurve lives in its own cell, computed on `corrected` rather than
+        # `decomp` -- retrying quick_decomposition with different
+        # num_components/proportions (the most common notebook edit) then
+        # only re-runs the cheap decomposition cell below, not the expensive
+        # per-frame Guinier fit.
         cells.append(_code(
             "corrected = trimmed.corrected_copy()\n"
+            "rgcurve = corrected.get_rg_curve()"
+        ))
+        cells.append(_code(
             f"decomp = corrected.quick_decomposition(num_components={ctx.num_components}"
-            f"{proportions_kwarg})\n"
+            f"{proportions_kwarg}, rgcurve=rgcurve)\n"
             f"{ranks_line}"
-            "rgcurve = decomp.get_rg_curve()\n"
             "decomp.plot_components(rgcurve=rgcurve)"
         ))
 
