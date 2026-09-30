@@ -3,6 +3,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
+from molass_gui import feature_flags
 from molass_gui.plot_embed import embed_plot, export_component_data
 from molass_gui.rgcurve_worker import start_rgcurve_worker
 from molass_gui.params_dialog import show_parameters_lazy
@@ -17,6 +18,8 @@ _MODEL_OPTIONS = [
     ('EGH \u2192 GRM',              'grm',  None),
 ]
 _MODEL_LABELS = [m[0] for m in _MODEL_OPTIONS]
+# SDM (lognormal) is immature -- hidden from the combobox unless --develop.
+_IMMATURE_MODEL_LABELS = {'EGH \u2192 SDM (lognormal)'}
 
 
 class QuickView:
@@ -45,8 +48,12 @@ class QuickView:
         hdr.pack(fill=tk.X)
 
         ttk.Label(hdr, text="Model:").pack(side=tk.LEFT)
+        if feature_flags.DEVELOP_MODE_ENABLED:
+            model_labels = _MODEL_LABELS
+        else:
+            model_labels = [l for l in _MODEL_LABELS if l not in _IMMATURE_MODEL_LABELS]
         self._model_var = tk.StringVar(value='EGH')
-        self._model_cb = ttk.Combobox(hdr, textvariable=self._model_var, values=_MODEL_LABELS,
+        self._model_cb = ttk.Combobox(hdr, textvariable=self._model_var, values=model_labels,
                                       state='readonly', width=24)
         self._model_cb.pack(side=tk.LEFT, padx=4)
 
@@ -68,8 +75,9 @@ class QuickView:
         # hint, not automatically applied) -- Apply is still the one action
         # that actually calls update_xr_ranks(). Computed on demand, not on
         # every QuickView open, since compute_scds() has real cost and rank-2
-        # cases are rare.
-        ttk.Button(hdr, text="Suggest", command=self._suggest_ranks).pack(side=tk.LEFT, padx=(0, 4))
+        # cases are rare. Immature -- hidden from the GUI unless --develop.
+        if feature_flags.DEVELOP_MODE_ENABLED:
+            ttk.Button(hdr, text="Suggest", command=self._suggest_ranks).pack(side=tk.LEFT, padx=(0, 4))
         # textvariable (not text=) so _apply_ranks() can swap the label via
         # .set() -- .configure() becomes unsafe on any button once score()'s
         # legacy import has run (see Show Parameters/_show_parameters below).

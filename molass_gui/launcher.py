@@ -105,10 +105,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dropbox-support", action="store_true",
                         help="Enable Dropbox folder auto-detection/sync (experimental, off by default)")
+    parser.add_argument("--develop", action="store_true",
+                        help="Enable immature features (SDM (lognormal), rank Suggest button)")
     args = parser.parse_args()
 
     from molass_gui import feature_flags
     feature_flags.DROPBOX_SUPPORT_ENABLED = args.dropbox_support
+    feature_flags.DEVELOP_MODE_ENABLED = args.develop
 
     Launcher().mainloop()
 
