@@ -1,6 +1,6 @@
 """User-facing names for internal elution-model keys."""
 
-_MODEL_DISPLAY_NAMES = {'cedm': 'EDM'}
+_MODEL_DISPLAY_NAMES = {}
 
 
 def model_display_name(model_key):

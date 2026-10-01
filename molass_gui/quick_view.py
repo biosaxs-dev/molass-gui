@@ -14,7 +14,7 @@ _MODEL_OPTIONS = [
     ('EGH',                        'egh',  None),
     ('EGH \u2192 SDM (mono)',       'sdm',  None),
     ('EGH \u2192 SDM (lognormal)',  'sdm',  'lognormal'),
-    ('EGH \u2192 EDM',              'cedm', None),
+    ('EGH \u2192 EDM',              'edm',  None),
     ('EGH \u2192 LKM',              'lkm',  None),
     ('EGH \u2192 GRM',              'grm',  None),
 ]
