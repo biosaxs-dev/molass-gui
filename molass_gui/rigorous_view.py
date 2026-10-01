@@ -474,8 +474,11 @@ class RigorousView:
             except Exception:
                 pass
             short = str(exc).split('\n')[0][:120]
-            self._win.after(0, lambda m=short: self._status_var.set(
-                f"Error: {m}  \u2014 see {log_path}"))
+            # See _launch's matching comment -- _ui_poll/_watch_tick only
+            # check _stopped, so it must be set here or a later-round failure
+            # keeps looking like normal progress instead of a visible error.
+            self._stopped = True
+            self._win.after(0, lambda m=short: self._on_launch_failed(m, log_path))
 
     def _show_parameters(self):
         # run_info.best_params reflects the live/final run once one exists;
@@ -603,8 +606,19 @@ class RigorousView:
             except Exception:
                 pass
             short = str(exc).split('\n')[0][:120]
-            self._win.after(0, lambda m=short: self._status_var.set(
-                f"Error: {m}  \u2014 see {log_path}"))
+            # _stopped must be set here (not only in the Tk callback below) --
+            # _ui_poll/_watch_tick are self-rescheduling via self._win.after
+            # and only check this flag. Without it, a failure after round 0
+            # already started (e.g. a later job in a multi-job run) kept
+            # looking like normal progress ("Job N/M complete -- starting
+            # next job...") forever, silently hiding the real error
+            # (molass-gui#7).
+            self._stopped = True
+            self._win.after(0, lambda m=short: self._on_launch_failed(m, log_path))
+
+    def _on_launch_failed(self, short_msg, log_path):
+        self._status_var.set(f"Error: {short_msg}  \u2014 see {log_path}")
+        self._show_resumable_controls()
 
     def _on_started(self):
         self._action_btn.state(['!disabled'])
