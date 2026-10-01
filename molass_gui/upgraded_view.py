@@ -2,6 +2,7 @@
 import tkinter as tk
 from tkinter import ttk
 
+from molass_gui.model_names import model_display_name
 from molass_gui.plot_embed import embed_plot, export_component_data
 from molass_gui.rgcurve_worker import start_rgcurve_worker
 from molass_gui.params_dialog import show_parameters_lazy
@@ -55,7 +56,7 @@ class UpgradedView:
 
     def show(self):
         win = tk.Toplevel(self._parent)
-        model = self._model_info['model'].upper()
+        model = model_display_name(self._model_info['model'])
         title = f"Upgraded View \u2014 {model}"
         if self._session_tag:
             title += f"  [{self._session_tag}]"

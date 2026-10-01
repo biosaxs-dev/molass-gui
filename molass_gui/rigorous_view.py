@@ -10,6 +10,7 @@ import time
 import tkinter as tk
 from tkinter import ttk
 
+from molass_gui.model_names import model_display_name
 from molass_gui.params_dialog import show_parameters_lazy
 from molass_gui.plot_components_dialog import show_plot_components_lazy
 from molass_gui.shape_analysis_dialog import show_shape_analysis_lazy
@@ -18,10 +19,6 @@ from molass_gui.ranks_dialog import show_set_ranks_lazy
 from molass_gui.window_tree import register_window_cleanup, register_close_guard
 
 _NUM_JOBS_DEFAULT = 10  # matches upgraded_view.py's New Analysis default
-
-# recipe/model key -> user-facing name; 'cedm' is an internal name only.
-_MODEL_DISPLAY_NAMES = {'cedm': 'EDM'}
-
 
 class RigorousView:
     def __init__(self, decomp, trimmed, est_kwargs, analysis_folder, ctx=None, parent=None,
@@ -95,8 +92,7 @@ class RigorousView:
 
         win = tk.Toplevel(self._parent)
         recipe = (self._est_kwargs.get('pipeline_recipe') or {})
-        # 'cedm' is the internal recipe/model key; displayed to users as "EDM".
-        model  = _MODEL_DISPLAY_NAMES.get(recipe.get('model', 'egh'), recipe.get('model', 'egh').upper())
+        model  = model_display_name(recipe.get('model', 'egh'))
         method = recipe.get('method', 'bh').upper()
         self._method = method
         if self._result_mode:

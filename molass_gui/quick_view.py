@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from molass_gui import feature_flags
+from molass_gui.model_names import model_display_name
 from molass_gui.plot_embed import embed_plot, export_component_data
 from molass_gui.rgcurve_worker import start_rgcurve_worker, attach_rgcurve_worker, rgcurve_n_frames
 from molass_gui.params_dialog import show_parameters_lazy
@@ -249,7 +250,7 @@ class QuickView:
             return
         ln_pore_sigma = float(self._psd_sigma_var.get()) if pore_dist == 'lognormal' else None
         self._action_btn.state(["disabled"])
-        self._status_var.set(f"Upgrading to {model_key.upper()}\u2026")
+        self._status_var.set(f"Upgrading to {model_display_name(model_key)}\u2026")
 
         def worker():
             try:
