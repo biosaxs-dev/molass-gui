@@ -5,7 +5,7 @@ from tkinter import ttk
 
 from molass_gui import feature_flags
 from molass_gui.plot_embed import embed_plot, export_component_data
-from molass_gui.rgcurve_worker import start_rgcurve_worker
+from molass_gui.rgcurve_worker import start_rgcurve_worker, attach_rgcurve_worker, rgcurve_n_frames
 from molass_gui.params_dialog import show_parameters_lazy
 
 # (label, recipe model key, pore_dist kwarg or None)
@@ -23,7 +23,8 @@ _IMMATURE_MODEL_LABELS = {'EGH \u2192 SDM (lognormal)'}
 
 
 class QuickView:
-    def __init__(self, decomp, trimmed, nc, ctx, parent=None, app_root=None, session_tag=None):
+    def __init__(self, decomp, trimmed, nc, ctx, parent=None, app_root=None, session_tag=None,
+                 rgcurve_queue=None):
         self._decomp = decomp
         self._trimmed = trimmed
         self._nc = nc
@@ -32,6 +33,10 @@ class QuickView:
         self._app_root = app_root
         self._session_tag = session_tag
         self._rgcurve = None
+        # Queue from an Rg-curve computation already kicked off as early as
+        # NaiveView._detect_worker (see rgcurve_worker.py) -- attached to below in
+        # show() instead of starting a redundant, later one.
+        self._rgcurve_queue = rgcurve_queue
         self._plot_state = None
         self._score = None
 
@@ -123,12 +128,18 @@ class QuickView:
                 self._action_btn.configure(text='Upgrade', command=self._upgrade)
         self._model_var.trace_add('write', _on_model_change)
 
-        # Show EGH plot_components immediately; Rg curve overlay follows once ready
+        # Show EGH plot_components immediately; Rg curve overlay follows once ready.
+        # Attach to the computation NaiveView._detect_worker already kicked off (far
+        # earlier -- right after corrected_copy()) rather than starting a new one here.
         result = self._decomp.plot_components()
         self._plot_state = embed_plot(win, result.fig)
         self._win = win
 
-        start_rgcurve_worker(win, self._decomp, self._rg_var, self._on_rgcurve_ready)
+        if self._rgcurve_queue is not None:
+            attach_rgcurve_worker(win, self._rgcurve_queue, rgcurve_n_frames(self._decomp),
+                                  self._rg_var, self._on_rgcurve_ready)
+        else:
+            start_rgcurve_worker(win, self._decomp, self._rg_var, self._on_rgcurve_ready)
 
     def _on_ranks_text_change(self, *_):
         if self._ranks_var.get().strip():
