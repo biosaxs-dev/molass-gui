@@ -157,13 +157,17 @@ class UpgradedView:
             # re-derives the same, correctly-initialized decomposition instead of silently
             # falling back to the unstable default for high-overlap datasets.
             decomp_params['proportions'] = self._ctx.proportions
-        pipeline_recipe = {
-            'num_components': self._nc,
-            'model': model_key,
-            'method': method,
-            'decomp_params': decomp_params,
-            'trim_params': {},
-            'baseline_params': {},
+        # build_pipeline_recipe() is the single shared builder for the core
+        # (decomposition/SSD-derived) recipe fields -- including uv_pickat/
+        # xr_pickat, captured from self._trimmed (this session's SSD) via its
+        # ssd= override, since self._decomp may not carry a .ssd of its own
+        # after upgrade(). Using it here instead of a separate hand-built dict
+        # is exactly what molass-library#292 asked for, to prevent this GUI's
+        # recipe from silently diverging from the library's own again (#291).
+        from molass.Rigorous import build_pipeline_recipe
+        pipeline_recipe = build_pipeline_recipe(
+            self._decomp, method=method, model=model_key, num_components=self._nc,
+            decomp_params=decomp_params, ssd=self._trimmed,
             # Always keep the collapse-prevention constraint on; for the naive-view
             # equal-split fallback (peeling couldn't resolve as many peaks as
             # requested), loosen it via constraint_weight instead of disabling it
@@ -171,23 +175,13 @@ class UpgradedView:
             # not a user choice, so its positions aren't precisely known, but a
             # component drifting hundreds of frames is never acceptable either
             # way (molass-gui#3).
-            'auto_constraint': True,
-            'constraint_weight': getattr(self._ctx, 'constraint_weight', None),
-        }
+            auto_constraint=True,
+            constraint_weight=getattr(self._ctx, 'constraint_weight', None),
+        )
         if pore_dist is not None:
             pipeline_recipe['pore_dist'] = pore_dist
         if ln_pore_sigma is not None:
             pipeline_recipe['ln_pore_sigma'] = ln_pore_sigma
-        # uv_pickat/xr_pickat: the wavelength (nm) / q-value (A^-1) this session's
-        # SSD was constructed with (app.py's Load dialog, default 280/0.02 when
-        # left blank) -- this dict is built directly here, not via
-        # RigorousImplement._build_auto_recipe(), so it needs its own copy of
-        # that capture (see molass-library#291) or every subprocess optimizer
-        # job silently re-fits against the wrong-wavelength UV/XR data.
-        if self._trimmed.uv is not None:
-            pipeline_recipe['uv_pickat'] = self._trimmed.uv.pickat
-        if self._trimmed.xr is not None:
-            pipeline_recipe['xr_pickat'] = self._trimmed.xr.pickat
         if getattr(self._decomp, 'xr_ranks', None) is not None:
             # Set in QuickView (survives Skip/Upgrade -- see
             # Decomposition.copy_with_new_components()) -- persisted here so
