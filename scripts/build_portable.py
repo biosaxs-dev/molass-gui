@@ -68,15 +68,22 @@ def download(url, dest):
 
 
 def check_build_interpreter():
-    """The build must run under the same major.minor Python it's packaging,
-    since that interpreter's own install is the source of the Tcl/Tk files."""
-    running = platform.python_version_tuple()[:2]
-    wanted = PYTHON_VERSION.split(".")[:2]
-    if list(running) != wanted:
+    """The build must run under the *exact* same Python version it's
+    packaging, not just the same major.minor -- the source of the Tcl/Tk
+    files it copies in is this interpreter's own install, and different
+    patch releases of CPython 3.14 have been observed to bundle different
+    Tcl/Tk major versions (3.14.4: Tcl/Tk 8.6, tcl86t.dll; 3.14.7: Tcl/Tk
+    9.0, tcl90.dll) -- mismatched DLL names are merely the visible symptom
+    of a version most likely too different to safely mix into one bundle.
+    A loose major.minor check previously let this through silently, surfacing
+    only as a confusing "missing tcl86t.dll" error deep inside bundle_tkinter()."""
+    running = platform.python_version()
+    if running != PYTHON_VERSION:
         sys.exit(
-            f"This script must be run with Python {'.'.join(wanted)}.x "
-            f"(currently running {platform.python_version()}). "
-            f"Try: py -{wanted[0]}.{wanted[1]} scripts\\build_portable.py"
+            f"This script must be run with the exact pinned Python "
+            f"{PYTHON_VERSION} (currently running {running}). "
+            f"Install that exact version and retry, or update PYTHON_VERSION "
+            f"here deliberately (check what Tcl/Tk version it bundles first)."
         )
 
 

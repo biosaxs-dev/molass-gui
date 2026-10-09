@@ -29,10 +29,22 @@ jobs:
           # run, which has no workflow_run event to read this from.
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
-      - name: Set up Python 3.14
+      - name: Read pinned Python version
+        id: pyver
+        shell: bash
+        run: echo "version=$(grep -m1 '^PYTHON_VERSION = ' scripts/build_portable.py | sed 's/PYTHON_VERSION = //;s/"//g')" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python (exact version pinned in build_portable.py)
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          # Must match build_portable.py's PYTHON_VERSION exactly, not just
+          # major.minor -- that script copies Tcl/Tk from *this* interpreter
+          # into the (separately pinned) embeddable runtime it bundles, and
+          # different 3.14.x patch releases have shipped different Tcl/Tk
+          # major versions (8.6 vs 9.0, incompatible DLL names and layout).
+          # Read dynamically above rather than duplicated here so there's
+          # only one place (PYTHON_VERSION) to update when it changes.
+          python-version: ${{ steps.pyver.outputs.version }}
 
       - name: Build portable zip
         run: python scripts/build_portable.py
