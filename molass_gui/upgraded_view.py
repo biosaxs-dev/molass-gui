@@ -178,6 +178,16 @@ class UpgradedView:
             pipeline_recipe['pore_dist'] = pore_dist
         if ln_pore_sigma is not None:
             pipeline_recipe['ln_pore_sigma'] = ln_pore_sigma
+        # uv_pickat/xr_pickat: the wavelength (nm) / q-value (A^-1) this session's
+        # SSD was constructed with (app.py's Load dialog, default 280/0.02 when
+        # left blank) -- this dict is built directly here, not via
+        # RigorousImplement._build_auto_recipe(), so it needs its own copy of
+        # that capture (see molass-library#291) or every subprocess optimizer
+        # job silently re-fits against the wrong-wavelength UV/XR data.
+        if self._trimmed.uv is not None:
+            pipeline_recipe['uv_pickat'] = self._trimmed.uv.pickat
+        if self._trimmed.xr is not None:
+            pipeline_recipe['xr_pickat'] = self._trimmed.xr.pickat
         if getattr(self._decomp, 'xr_ranks', None) is not None:
             # Set in QuickView (survives Skip/Upgrade -- see
             # Decomposition.copy_with_new_components()) -- persisted here so
