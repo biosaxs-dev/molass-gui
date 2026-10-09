@@ -1,0 +1,15 @@
+title: Molass GUI
+description: >-
+  Point-and-click SEC-SAXS data analysis -- no programming required.
+theme: jekyll-theme-cayman
+
+# Explicit rather than relying on GitHub Pages' default plugin set: rewrites
+# this folder's relative *.md links (e.g. [Install](installation.md)) to the
+# correct built *.html permalinks. Whitelisted for GitHub Pages builds --
+# see https://pages.github.com/versions/.
+plugins:
+  - jekyll-relative-links
+
+relative_links:
+  enabled: true
+  collections: true

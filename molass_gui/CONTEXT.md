@@ -92,6 +92,8 @@ bug class here.
 
 ## Where to find more
 
-- Design docs: `Copilot/DESIGN_ai_assistant_integration.md`, `Copilot/DESIGN_dropbox_integration.md`
+- Design docs: `Copilot/DESIGN_ai_assistant_integration.md`, `Copilot/DESIGN_dropbox_integration.md`, `Copilot/DESIGN_portable_installer.md`
+- User documentation (installation, Quick Start walkthrough with screenshots): `docs/` (published at https://biosaxs-dev.github.io/molass-gui/)
+- Windows portable zip build: `scripts/build_portable.py` (run via `.github/workflows/build_portable_zip.yml`)
 - Main pipeline reference: https://github.com/biosaxs-dev/molass-library (`molass/CONTEXT.md`)
 - Source / issues: https://github.com/biosaxs-dev/molass-gui

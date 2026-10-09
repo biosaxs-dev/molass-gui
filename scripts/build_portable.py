@@ -160,6 +160,42 @@ def install_molass_gui(source):
     ])
 
 
+# Bundling full molass_data (~120 MB, 5 datasets) would roughly double the
+# zip's size; SAMPLE1 alone is a 13 MB download that's enough for the Quick
+# Start guide's walkthrough. Trimmed post-install rather than hand-copied,
+# so pip still records it as a real, upgradable, version-tracked dependency.
+BUNDLED_SAMPLES = ["SAMPLE1"]
+ALL_SAMPLE_NAMES = ["SAMPLE1", "SAMPLE2", "SAMPLE3", "SAMPLE4", "SAMPLE5"]
+
+
+def bundle_sample_data():
+    python_exe = EMBED_DIR / "python.exe"
+    run([
+        str(python_exe), "-m", "pip", "install",
+        "--no-warn-script-location", "--no-cache-dir",
+        "--only-binary=:all:",
+        "molass_data",
+    ])
+
+    pkg_dir = EMBED_DIR / "Lib" / "site-packages" / "molass_data"
+    for name in ALL_SAMPLE_NAMES:
+        if name not in BUNDLED_SAMPLES:
+            shutil.rmtree(pkg_dir / name)
+
+    # Trim __init__.py's SAMPLE*=get_data_path(...) assignments to match --
+    # naive_view.py's sample dropdown lists every SAMPLE* attribute it
+    # defines, regardless of whether the folder actually exists, so a
+    # stale assignment would offer a selection that fails when loaded.
+    init_path = pkg_dir / "__init__.py"
+    lines = init_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    lines = [
+        l for l in lines
+        if not (l.startswith("SAMPLE") and l.split("=")[0].strip() not in BUNDLED_SAMPLES)
+    ]
+    init_path.write_text("".join(lines), encoding="utf-8")
+    log(f"bundled sample data: {', '.join(BUNDLED_SAMPLES)}")
+
+
 def bundle_tkinter():
     local_python_dir = Path(sys.executable).resolve().parent
     dlls_dir = EMBED_DIR / "DLLs"
@@ -230,6 +266,7 @@ def main():
     patch_pth_file()
     bootstrap_pip()
     install_molass_gui(args.source)
+    bundle_sample_data()
     bundle_tkinter()
     write_launcher()
     zip_path = make_zip()
