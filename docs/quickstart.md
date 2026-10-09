@@ -9,9 +9,11 @@ first.
 
 ## What you'll see at the end
 
-A two-component mixture resolved into separate scattering profiles for
-each component, cross-checked against each component's radius of gyration
-($R_g$) — the same kind of result you'd get from the
+A mixture that looks at first glance like two components resolved into
+**three** — because one of those two peaks has a smaller shoulder hiding
+inside it — each with its own separated scattering profile, cross-checked
+against its own radius of gyration ($R_g$). The same kind of result you'd
+get from the
 [notebook/API tutorial](https://biosaxs-dev.github.io/molass-tutorial/),
 but driven entirely by clicking through windows.
 
