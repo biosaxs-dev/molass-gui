@@ -45,9 +45,14 @@ def build_notebook(ctx):
         "different parameters, compare runs side by side, etc.)."
     )]
 
+    # ctx.uv_pickat mirrors app.py's optional "UV wavelength (nm)" field --
+    # None means the GUI's Load dialog was left blank, so omit the kwarg
+    # entirely rather than hardcoding the library's own default (280) here.
+    uv_pickat_kwarg = "" if ctx.uv_pickat is None else f", uv_pickat={ctx.uv_pickat!r}"
+
     cells.append(_code(
         "from molass.DataObjects import SecSaxsData as SSD\n\n"
-        f"ssd = SSD(r\"{ctx.folder}\")\n"
+        f"ssd = SSD(r\"{ctx.folder}\"{uv_pickat_kwarg})\n"
         "trimmed = ssd.trimmed_copy()\n"
         "trimmed.plot_compact(baseline=True)"
     ) if ctx.dropbox_path is None else _code(
@@ -60,7 +65,7 @@ def build_notebook(ctx):
         "from molass.DataObjects import SecSaxsData as SSD\n"
         "from molass.DataUtils import sync_dropbox_folder\n\n"
         f"data_folder = sync_dropbox_folder(r\"{ctx.dropbox_path}\")\n"
-        "ssd = SSD(data_folder)\n"
+        f"ssd = SSD(data_folder{uv_pickat_kwarg})\n"
         "trimmed = ssd.trimmed_copy()\n"
         "trimmed.plot_compact(baseline=True)"
     ))

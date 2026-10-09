@@ -31,34 +31,42 @@ class App:
             row=0, column=1, padx=6)
         ttk.Button(f, text="Browse…", command=self._browse).grid(row=0, column=2)
 
+        # Optional override for SecSaxsData's uv_pickat (default 280 nm) -- blank
+        # means "use the library default", not 0 or any other numeric sentinel.
+        ttk.Label(f, text="UV wavelength (nm, optional):").grid(
+            row=1, column=0, sticky=tk.W, pady=4)
+        self._uv_wavelength_var = tk.StringVar(value="")
+        ttk.Entry(f, textvariable=self._uv_wavelength_var, width=10).grid(
+            row=1, column=1, sticky=tk.W, padx=6)
+
         sample_names = self._discover_samples()
         if sample_names:
-            ttk.Label(f, text="Sample:").grid(row=1, column=0, sticky=tk.W, pady=4)
+            ttk.Label(f, text="Sample:").grid(row=2, column=0, sticky=tk.W, pady=4)
             self._sample_var = tk.StringVar(value="(custom folder)")
             ttk.Combobox(f, textvariable=self._sample_var,
                         values=["(custom folder)"] + sample_names,
                         state="readonly", width=20).grid(
-                row=1, column=1, sticky=tk.W, padx=6)
+                row=2, column=1, sticky=tk.W, padx=6)
             self._sample_var.trace_add('write', self._on_sample_change)
 
         recent = recent_folders.load()
         if recent:
-            ttk.Label(f, text="Recent:").grid(row=2, column=0, sticky=tk.W, pady=4)
+            ttk.Label(f, text="Recent:").grid(row=3, column=0, sticky=tk.W, pady=4)
             self._recent_var = tk.StringVar(value="(custom folder)")
             ttk.Combobox(f, textvariable=self._recent_var,
                         values=["(custom folder)"] + recent,
                         state="readonly", width=52).grid(
-                row=2, column=1, columnspan=2, sticky=tk.W, padx=6)
+                row=3, column=1, columnspan=2, sticky=tk.W, padx=6)
             self._recent_var.trace_add('write', self._on_recent_change)
 
         self._btn = ttk.Button(f, text="Load", command=self._run)
-        self._btn.grid(row=3, column=0, columnspan=3, pady=10)
+        self._btn.grid(row=4, column=0, columnspan=3, pady=10)
 
         self._status_var = tk.StringVar(value="Ready.")
         # wraplength caps the label so a long status message (e.g. a full
         # cache path) wraps instead of widening the fixed-size dialog.
         ttk.Label(f, textvariable=self._status_var, foreground="gray", wraplength=400).grid(
-            row=4, column=0, columnspan=3, sticky=tk.W)
+            row=5, column=0, columnspan=3, sticky=tk.W)
 
         # Indeterminate: the Dropbox bulk-zip download has no byte-level
         # progress to report, only a start/end status message.
@@ -155,6 +163,17 @@ class App:
                                     "Please select a data folder before clicking Load.")
             return
 
+        uv_wavelength_text = self._uv_wavelength_var.get().strip()
+        uv_pickat = None
+        if uv_wavelength_text:
+            try:
+                uv_pickat = float(uv_wavelength_text)
+            except ValueError:
+                messagebox.showwarning(
+                    "Invalid UV Wavelength",
+                    "UV wavelength must be a number (nm), e.g. 280 or 290.")
+                return
+
         if feature_flags.DROPBOX_SUPPORT_ENABLED and "dropbox" in folder.lower():
             try:
                 from molass.DataUtils import DropboxSync
@@ -184,7 +203,7 @@ class App:
                             _self._win.after(0, lambda: _self._status_var.set(msg))
 
                         self._win.after(0, lambda: self._progress.grid(
-                            row=5, column=0, columnspan=3, sticky=tk.W, pady=(4, 0)))
+                            row=6, column=0, columnspan=3, sticky=tk.W, pady=(4, 0)))
                         self._win.after(0, lambda: self._progress.start(10))
                         try:
                             actual_folder = sync_dropbox_folder(dropbox_path, on_status=on_status)
@@ -200,7 +219,8 @@ class App:
 
             try:
                 from molass.DataObjects import SecSaxsData as SSD
-                ssd = SSD(actual_folder)
+                ssd_kwargs = {} if uv_pickat is None else {"uv_pickat": uv_pickat}
+                ssd = SSD(actual_folder, **ssd_kwargs)
                 trimmed = ssd.trimmed_copy()
 
                 def on_main():
@@ -213,6 +233,7 @@ class App:
                     session_tag = os.path.basename(folder.rstrip("\\/")) or folder
                     from molass_gui.session_context import SessionContext
                     ctx = SessionContext(folder)
+                    ctx.uv_pickat = uv_pickat
                     from molass_gui.naive_view import NaiveView
                     NaiveView(ssd, trimmed, ctx, parent=self._win, app_root=self._app_root,
                               session_tag=session_tag).show()
