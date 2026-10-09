@@ -204,7 +204,27 @@ def bundle_tkinter():
     for name in TKINTER_DLLS:
         src = local_python_dir / "DLLs" / name
         if not src.exists():
-            sys.exit(f"missing {src} -- is Tcl/Tk installed with this Python?")
+            # Diagnostic dump rather than a bare error: actions/setup-python's
+            # hosted Windows Python has been observed to lay out (or omit)
+            # Tcl/Tk differently from a standard python.org installer -- show
+            # what's actually there so this is fixable from CI logs alone.
+            log(f"ERROR: missing {src}")
+            log(f"contents of {local_python_dir}:")
+            for p in sorted(local_python_dir.glob("*")):
+                log(f"  {p.name}")
+            log(f"contents of {local_python_dir / 'DLLs'} (if present):")
+            dlls_src_dir = local_python_dir / "DLLs"
+            if dlls_src_dir.exists():
+                for p in sorted(dlls_src_dir.glob("*tcl*")) + sorted(dlls_src_dir.glob("*tk*")):
+                    log(f"  {p.name}")
+            else:
+                log("  (no DLLs folder at all)")
+            log(f"contents of {local_python_dir / 'Lib'} (tkinter-related):")
+            lib_dir = local_python_dir / "Lib"
+            if lib_dir.exists():
+                for p in sorted(lib_dir.glob("*tk*")):
+                    log(f"  {p.name}")
+            sys.exit(1)
         shutil.copy2(src, dlls_dir / name)
 
     for rel in TKINTER_FOLDERS:
