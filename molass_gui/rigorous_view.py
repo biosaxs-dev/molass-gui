@@ -192,7 +192,7 @@ class RigorousView:
         # 5-panel figure: top 3 panels + Function SV row + Rg Values row
         self._fig = plt.figure(figsize=(18, 8.0))
         gs = gridspec.GridSpec(3, 3, figure=self._fig,
-                               height_ratios=[4, 1.5, 1.5], hspace=0.55)
+                               height_ratios=[4, 1.5, 1.5], hspace=0.55, top=0.85)
         self._ax_uv      = self._fig.add_subplot(gs[0, 0])
         self._ax_xr      = self._fig.add_subplot(gs[0, 1])
         self._ax_score   = self._fig.add_subplot(gs[0, 2])
@@ -209,8 +209,22 @@ class RigorousView:
         NavigationToolbar2Tk(canvas, win).update()
         self._canvas = canvas
         self._win = win
+        if not self._result_mode:
+            self._set_suptitle()
 
         self._win.after(10, self._prep_main_result if self._result_mode else self._prep_main)
+
+    def _set_suptitle(self):
+        """Identify dataset, model and method, in the same style as plot_components()."""
+        from molass.PlotUtils.DecompositionPlot import make_title_text
+        recipe = (self._est_kwargs.get('pipeline_recipe') or {})
+        ssd = self._decomp.ssd if self._decomp is not None else None
+        title = make_title_text(
+            ssd,
+            recipe.get('model', 'egh'),
+            f"rigorous optimization ({self._method})",
+            dataset=None if getattr(ssd, 'datafiles', None) else self._session_tag)
+        self._fig.suptitle(title, fontsize=18)
 
     # ------------------------------------------------------------------
     # Prep phase
@@ -284,6 +298,7 @@ class RigorousView:
             self._trimmed = trimmed
             self._est_kwargs = {'pipeline_recipe': recipe}
             self._method = recipe.get('method', 'bh').upper()
+            self._set_suptitle()
 
             # This analysis already computed and exported its Rg curve to
             # optimized/rg-curve/ the first time it ran -- reload that instead
