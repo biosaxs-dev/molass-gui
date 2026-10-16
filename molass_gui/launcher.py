@@ -100,6 +100,32 @@ class Launcher(tk.Tk):
         self.withdraw()
 
 
+def _enable_crash_log():
+    """Dump every thread's Python stack to ~/.molass/gui_crash.log on a hard abort.
+
+    Native aborts such as ``Tcl_AsyncDelete: async handler deleted by the wrong thread``
+    kill the process without a Python traceback; faulthandler turns them into a stack dump
+    that shows which thread/object was involved (molass-gui#9). Failure to set this up
+    must never prevent the GUI from starting.
+    """
+    try:
+        import faulthandler
+        import os
+        import datetime
+        folder = os.path.join(os.path.expanduser("~"), ".molass")
+        os.makedirs(folder, exist_ok=True)
+        global _crash_log_file
+        _crash_log_file = open(os.path.join(folder, "gui_crash.log"), "a", buffering=1)
+        _crash_log_file.write("--- molass-gui started %s pid=%d ---\n"
+                              % (datetime.datetime.now().isoformat(timespec="seconds"), os.getpid()))
+        faulthandler.enable(file=_crash_log_file, all_threads=True)
+    except Exception:
+        pass
+
+
+_crash_log_file = None  # kept open for the lifetime of the process (faulthandler writes to it on a crash)
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -109,6 +135,7 @@ def main():
                         help="Enable immature features (SDM (lognormal), rank Suggest button)")
     args = parser.parse_args()
 
+    _enable_crash_log()
     from molass_gui import feature_flags
     feature_flags.DROPBOX_SUPPORT_ENABLED = args.dropbox_support
     feature_flags.DEVELOP_MODE_ENABLED = args.develop

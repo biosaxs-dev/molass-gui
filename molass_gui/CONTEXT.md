@@ -69,7 +69,16 @@ teardown happens deterministically — without the explicit `gc.collect()`,
 teardown can be deferred to whichever thread next triggers a GC pass
 (sometimes a background thread), which is the same `Tcl_AsyncDelete` crash
 above by a different route. Always use these helpers rather than a bare
-`plt.close()` when tearing down an embedded/dialog figure.
+`plt.close()` when tearing down an embedded/dialog figure. `RigorousView` also
+calls `gc.collect()` on the main thread right before starting the optimizer worker
+thread, for the same reason.
+
+### Hard aborts leave diagnostics in `~/.molass`
+`launcher.main()` enables `faulthandler` writing to `~/.molass/gui_crash.log`
+(every thread's stack on a native abort such as `Tcl_AsyncDelete`), and
+`RigorousView._launch` appends one line per launch attempt to
+`~/.molass/gui_launches.log`, so a crash before the library writes its own
+`RUN_MANIFEST.json` is still visible. Look there first.
 
 ### Never `.configure()` a button created before `decomp.score()` runs
 Some transitive dependency (`python-tkdnd`/`ttkwidgets`) monkey-patches

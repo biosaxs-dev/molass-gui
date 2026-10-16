@@ -21,6 +21,25 @@ from molass_gui.window_tree import register_window_cleanup, register_close_guard
 
 _NUM_JOBS_DEFAULT = 10  # matches upgraded_view.py's New Analysis default
 
+
+def _write_launch_breadcrumb(analysis_folder, method):
+    """Append one line to ~/.molass/gui_launches.log before optimize_rigorously() starts.
+
+    If the process then dies hard (e.g. Tcl_AsyncDelete) before the library writes its own
+    RUN_MANIFEST.json / runs.jsonl entry, this still shows that a launch was attempted
+    (molass-gui#9). Kept outside the analysis folder so it cannot interfere with the
+    library's folder handling. Never raises.
+    """
+    try:
+        import datetime
+        folder = os.path.join(os.path.expanduser("~"), ".molass")
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, "gui_launches.log"), "a", encoding="utf-8") as f:
+            f.write("%s pid=%d method=%s folder=%s\n"
+                    % (datetime.datetime.now().isoformat(timespec="seconds"), os.getpid(), method, analysis_folder))
+    except Exception:
+        pass
+
 class RigorousView:
     def __init__(self, decomp, trimmed, est_kwargs, analysis_folder, ctx=None, parent=None,
                  app_root=None, session_tag=None, score=None):
@@ -573,7 +592,7 @@ class RigorousView:
         try:
             pipeline_recipe = self._est_kwargs.get('pipeline_recipe', None)
             method = (pipeline_recipe or {}).get('method', 'BH').upper()
-
+            _write_launch_breadcrumb(self._analysis_folder, method)
             def _on_round_start(round_idx, num_jobs, run_info):
                 self._job_round = round_idx + 1
                 self._run_info = run_info
