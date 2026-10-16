@@ -4,6 +4,7 @@ Receives an already-upgraded Decomposition from UpgradedView (Phase 4).
 Transitions: computing Rg → scoring → running → done.
 """
 import os
+import gc
 import traceback
 import threading
 import time
@@ -432,6 +433,7 @@ class RigorousView:
             self._resume_jobs_n = max(1, int(self._resume_jobs_var.get()))
         except (ValueError, tk.TclError):
             self._resume_jobs_n = 1
+        gc.collect()    # see _optimize(): keep GC-driven Tk teardown on the main thread
         threading.Thread(target=self._launch_resume, daemon=True).start()
 
     def _launch_resume(self):
@@ -561,6 +563,10 @@ class RigorousView:
 
     def _optimize(self):
         self._status_var.set("Starting\u2026")
+        # Collect pending cyclic garbage (e.g. Tk-embedded matplotlib figures from earlier
+        # views) here on the main thread, so a GC pass triggered by the worker's
+        # allocations cannot tear Tk objects down off-thread (Tcl_AsyncDelete).
+        gc.collect()
         threading.Thread(target=self._launch, daemon=True).start()
 
     def _launch(self):
