@@ -4,6 +4,29 @@ Lets any view export a notebook reproducing the exact pipeline run in the GUI
 so far (see notebook_export.py) -- the bridge between molass-gui's simple
 wizard and full notebook flexibility.
 """
+import os
+
+
+def to_sample_name(local_path):
+    """Return the molass_data attribute name (e.g. ``'SAMPLE6'``) whose dataset
+    lives at local_path, else None (also when molass_data isn't installed).
+
+    The exported notebook then loads it as ``molass_data.SAMPLE6`` instead of
+    baking in this machine's absolute site-packages path, which would break on
+    any other machine or environment.
+    """
+    try:
+        import molass_data
+    except ImportError:
+        return None
+    target = os.path.normcase(os.path.realpath(local_path))
+    for name in dir(molass_data):
+        if not name.startswith("SAMPLE"):
+            continue
+        path = getattr(molass_data, name)
+        if isinstance(path, str) and os.path.normcase(os.path.realpath(path)) == target:
+            return name
+    return None
 
 
 def to_dropbox_path(local_path):
@@ -45,6 +68,12 @@ class SessionContext:
         self.analysis_folder = None
         self.num_jobs = None  # successive reseeded jobs (molass-researcher experiment 36)
         self.xr_ranks = None  # set via QuickView's Ranks entry (Decomposition.update_xr_ranks)
+
+    @property
+    def sample_name(self):
+        """molass_data attribute name (e.g. 'SAMPLE6') if self.folder is a bundled
+        sample dataset, else None. Takes precedence over dropbox_path in exports."""
+        return to_sample_name(self.folder)
 
     @property
     def dropbox_path(self):

@@ -50,22 +50,35 @@ def build_notebook(ctx):
     # entirely rather than hardcoding the library's own default (280) here.
     uv_pickat_kwarg = "" if ctx.uv_pickat is None else f", uv_pickat={ctx.uv_pickat!r}"
 
-    cells.append(_code(
-        "from molass.DataObjects import SecSaxsData as SSD\n\n"
-        f"ssd = SSD(r\"{ctx.folder}\"{uv_pickat_kwarg})\n"
-        "trimmed = ssd.trimmed_copy()\n"
-        "trimmed.plot_compact(baseline=True)"
-    ) if ctx.dropbox_path is None else _code(
+    if ctx.sample_name is not None:
+        # A bundled sample dataset: refer to it through the molass_data package, not
+        # the absolute path of this machine's site-packages, so the notebook runs
+        # anywhere molass_data is installed.
+        load_source = (
+            "import molass_data\n"
+            "from molass.DataObjects import SecSaxsData as SSD\n\n"
+            f"ssd = SSD(molass_data.{ctx.sample_name}{uv_pickat_kwarg})\n"
+        )
+    elif ctx.dropbox_path is None:
+        load_source = (
+            "from molass.DataObjects import SecSaxsData as SSD\n\n"
+            f"ssd = SSD(r\"{ctx.folder}\"{uv_pickat_kwarg})\n"
+        )
+    else:
         # Resolve via Dropbox on every run (cheap no-op when unchanged) rather
         # than baking in the raw local path -- reading that directly would
         # defeat the whole point of sync_dropbox_folder (repeated re-downloads
         # from an "online-only" Dropbox-synced folder). Also more portable: a
         # Dropbox-relative path works on any machine with valid credentials,
         # unlike a machine-specific local mount path.
-        "from molass.DataObjects import SecSaxsData as SSD\n"
-        "from molass.DataUtils import sync_dropbox_folder\n\n"
-        f"data_folder = sync_dropbox_folder(r\"{ctx.dropbox_path}\")\n"
-        f"ssd = SSD(data_folder{uv_pickat_kwarg})\n"
+        load_source = (
+            "from molass.DataObjects import SecSaxsData as SSD\n"
+            "from molass.DataUtils import sync_dropbox_folder\n\n"
+            f"data_folder = sync_dropbox_folder(r\"{ctx.dropbox_path}\")\n"
+            f"ssd = SSD(data_folder{uv_pickat_kwarg})\n"
+        )
+    cells.append(_code(
+        load_source +
         "trimmed = ssd.trimmed_copy()\n"
         "trimmed.plot_compact(baseline=True)"
     ))
