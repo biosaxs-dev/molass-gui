@@ -36,6 +36,24 @@ def _upgrade_call(model_info, target_var):
     return f"{target_var} = decomp.upgrade({model_key!r}{kwargs})"
 
 
+def _anomaly_handling_off_source():
+    """Source switching molass's anomaly handling off, or "" when it is on.
+
+    The GUI can be started with --no-anomaly-handling (to observe an irregular UV end); the
+    exported notebook re-runs the trimming in its own process, so it has to say so too.
+    A molass without the option counts as "on" (nothing to switch).
+    """
+    try:
+        from molass.Global.Options import get_molass_options
+        off = get_molass_options('anomaly_handling') is False
+    except Exception:
+        off = False
+    if not off:
+        return ""
+    return ("from molass.Global.Options import set_molass_options\n"
+            "set_molass_options(anomaly_handling=False)  # the GUI was started with --no-anomaly-handling\n\n")
+
+
 def build_notebook(ctx):
     """Build an nbformat notebook reproducing ctx's pipeline so far."""
     cells = [_md(
@@ -78,6 +96,7 @@ def build_notebook(ctx):
             f"ssd = SSD(data_folder{uv_pickat_kwarg})\n"
         )
     cells.append(_code(
+        _anomaly_handling_off_source() +
         load_source +
         "trimmed = ssd.trimmed_copy()\n"
         "trimmed.plot_compact(baseline=True)"
@@ -223,6 +242,7 @@ def build_restore_notebook(analysis_folder):
     )]
 
     cells.append(_code(
+        _anomaly_handling_off_source() +
         "from molass.Rigorous.RecipeRunner import rebuild_decomposition_from_recipe\n"
         "from molass.Rigorous.RunInfo import RunInfo, restore\n"
         "from molass.Rigorous.CurrentStateUtils import try_fast_rg_curve\n\n"
