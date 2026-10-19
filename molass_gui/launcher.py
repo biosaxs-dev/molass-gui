@@ -133,7 +133,19 @@ def main():
                         help="Enable Dropbox folder auto-detection/sync (experimental, off by default)")
     parser.add_argument("--develop", action="store_true",
                         help="Enable immature features (SDM (lognormal), rank Suggest button)")
+    parser.add_argument("--no-anomaly-handling", action="store_true",
+                        help="Do not exclude an irregular UV end from the trimming/mapping (to observe the "
+                             "anomaly itself; molass's default is to handle it)")
     args = parser.parse_args()
+
+    if args.no_anomaly_handling:
+        # trimming runs in this process (see app.py), so the global option is enough
+        from molass.Global.Options import set_molass_options
+        try:
+            set_molass_options(anomaly_handling=False)
+        except ValueError:
+            parser.error("the installed molass has no anomaly handling (option 'anomaly_handling'); "
+                         "--no-anomaly-handling is not needed")
 
     _enable_crash_log()
     from molass_gui import feature_flags
