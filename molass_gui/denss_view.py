@@ -90,6 +90,8 @@ class DenssDialog:
         out_frame.pack(fill=tk.X)
         ttk.Label(out_frame, text="Output Folder:").pack(side=tk.LEFT)
         default_out = os.path.join(analysis_folder, "DENSS", f"component_{best_i + 1}")
+        self._analysis_folder = analysis_folder
+        self._auto_out = default_out    # last auto-generated folder; lets us tell it apart from a user edit
         self._out_var = tk.StringVar(value=default_out)
         ttk.Entry(out_frame, textvariable=self._out_var, width=50).pack(
             side=tk.LEFT, padx=8, fill=tk.X, expand=True)
@@ -125,6 +127,7 @@ class DenssDialog:
         self._run_btn.pack(side=tk.LEFT, padx=4)
         self._cancel_btn = ttk.Button(btn_row, text="Cancel", command=self._cancel, state="disabled")
         self._cancel_btn.pack(side=tk.LEFT, padx=4)
+        ttk.Button(btn_row, text="View\u2026", command=self._view).pack(side=tk.LEFT, padx=4)
         ttk.Button(btn_row, text="Close", command=win.destroy).pack(side=tk.LEFT, padx=4)
 
         # instant 3xRg guess is shown above already; refine it in the background since the
@@ -138,6 +141,10 @@ class DenssDialog:
         rg = self._rgs[i]
         if rg:
             self._dmax_var.set(round(rg * 3, 1))
+        new_auto = os.path.join(self._analysis_folder, "DENSS", f"component_{i + 1}")
+        if self._out_var.get() == self._auto_out:   # keep a folder the user typed or browsed to
+            self._out_var.set(new_auto)
+        self._auto_out = new_auto
         self._start_dmax_estimate(i)
 
     def _start_dmax_estimate(self, i):
@@ -176,6 +183,22 @@ class DenssDialog:
         folder = filedialog.askdirectory(title="Select output folder", parent=self._win)
         if folder:
             self._out_var.set(folder)
+
+    def _view(self):
+        """Open the final map of the selected component if it exists in the output folder,
+        otherwise let the user pick an .mrc file there."""
+        from molass_gui.mrc_viewer_dialog import show_mrc_viewer
+
+        out_folder = self._out_var.get()
+        path = os.path.join(out_folder, f"component_{self._combo.current() + 1}.mrc")
+        if not os.path.isfile(path):
+            path = filedialog.askopenfilename(
+                title="Select an MRC file", parent=self._win,
+                initialdir=out_folder if os.path.isdir(out_folder) else None,
+                filetypes=[("MRC files", "*.mrc"), ("All files", "*.*")])
+            if not path:
+                return
+        show_mrc_viewer(self._win, path)
 
     def _run(self):
         i = self._combo.current()
