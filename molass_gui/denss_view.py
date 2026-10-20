@@ -259,7 +259,9 @@ class DenssDialog:
         self._cancel_requested = False
         self._done = False
         self._error = None
-        self._pb.configure(mode="indeterminate")
+        # a finished run leaves maximum=1 (full bar); with step 1 the bounce would then just
+        # flip between the two ends, so restore the default range before pulsing again
+        self._pb.configure(mode="indeterminate", maximum=100, value=0)
         self._pb.start(50)
         self._status_label.configure(style="TLabel")
         self._status_var.set("Running\u2026")
