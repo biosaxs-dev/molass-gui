@@ -55,10 +55,35 @@ def show_kratky_shape_match_lazy(win, status_var, decomp, analysis_folder, rgcur
     finally:
         status_var.set(prev)
 
-    plot_result = result.plot_kratky_shape_match()
-
     dlg = tk.Toplevel(win)
     dlg.title("Kratky Shape Match")
+
+    # One overlay window, redrawn in place by each double-click on the heatmap.
+    overlay = {}
+
+    def _show_overlay(res, component, shape):
+        from matplotlib.figure import Figure
+        from molass.Kratky.ShapeMatch import plot_kratky_overlay
+        from molass_gui.plot_embed import embed_plot, close_dialog_figure
+
+        odlg = overlay.get("dlg")
+        if odlg is not None and odlg.winfo_exists():
+            plot_kratky_overlay(res, component, shape, fig=overlay["fig"])
+            overlay["canvas"].draw()
+            odlg.lift()
+            return
+        odlg = tk.Toplevel(dlg)
+        odlg.title("Kratky plot overlay")
+        ofig = Figure(figsize=(7, 6))
+        plot_kratky_overlay(res, component, shape, fig=ofig)
+        canvas, _, _ = embed_plot(odlg, ofig)
+        _oclose = lambda: close_dialog_figure(odlg, ofig)
+        ttk.Button(odlg, text="Close", command=_oclose).pack(pady=8)
+        odlg.protocol("WM_DELETE_WINDOW", _oclose)
+        overlay.update(dlg=odlg, fig=ofig, canvas=canvas)
+
+    plot_result = result.plot_kratky_shape_match(on_dblclick=_show_overlay)
+
     canvas = FigureCanvasTkAgg(plot_result.fig, master=dlg)
     canvas.draw()
     canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
