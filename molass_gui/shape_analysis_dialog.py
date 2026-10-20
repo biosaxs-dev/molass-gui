@@ -1,4 +1,4 @@
-"""Shape Analysis dialog -- on-demand view of the current/best result's
+"""Kratky Shape Match dialog -- on-demand view of the current/best result's
 Kratky-plot shape-match diagnostic, mirroring plot_components_dialog.py's
 lazy-build pattern.
 
@@ -58,7 +58,7 @@ def show_shape_analysis_lazy(win, status_var, decomp, analysis_folder, rgcurve=N
     plot_result = result.plot_shape_analysis()
 
     dlg = tk.Toplevel(win)
-    dlg.title("Shape Analysis")
+    dlg.title("Kratky Shape Match")
     canvas = FigureCanvasTkAgg(plot_result.fig, master=dlg)
     canvas.draw()
     canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)

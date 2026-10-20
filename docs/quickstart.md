@@ -111,7 +111,7 @@ When it's done, use **Run DENSS…** for 3D shape reconstruction (its **View…*
 button opens the resulting `.mrc` map in an interactive viewer — rotate the
 isosurface or voxel scatter with the mouse; in a notebook the same viewer is
 `molass.SAXS.MrcViewer.show_mrc_views(path)`),
-**Shape Analysis…** or **Plot Components…** to inspect the final result, or
+**Kratky Shape Match…** or **Plot Components…** to inspect the final result, or
 **Export to Notebook…** at any phase to continue in a real Jupyter notebook
 — the escape hatch for anything this wizard doesn't expose a button for.
 

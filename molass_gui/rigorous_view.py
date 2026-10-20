@@ -87,7 +87,7 @@ class RigorousView:
         self._result_mode = False
         self._result_best_params = None
         # Ephemeral per-component rank override (see ranks_dialog.py) -- applied
-        # to whichever result Plot Components/Shape Analysis/Run DENSS next
+        # to whichever result Plot Components/Kratky Shape Match/Run DENSS next
         # (re)loads; not written back to recipe.json.
         self._xr_ranks = None
 
@@ -180,7 +180,7 @@ class RigorousView:
                                       command=self._show_parameters, state="disabled")
         self._plotcomp_btn = ttk.Button(hdr, text="Plot Components\u2026",
                                         command=self._plot_components, state="disabled")
-        self._shapeanalysis_btn = ttk.Button(hdr, text="Shape Analysis\u2026",
+        self._shapeanalysis_btn = ttk.Button(hdr, text="Kratky Shape Match\u2026",
                                             command=self._shape_analysis, state="disabled")
         self._denss_btn = ttk.Button(hdr, text="Run DENSS\u2026",
                                      command=self._run_denss, state="disabled")
@@ -567,7 +567,7 @@ class RigorousView:
         self._xr_ranks = ranks
         self._status_var.set(
             f"Ranks set to {ranks} \u2014 applies next time Plot Components/"
-            "Shape Analysis/Run DENSS is (re)opened")
+            "Kratky Shape Match/Run DENSS is (re)opened")
 
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
