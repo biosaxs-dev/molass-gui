@@ -57,6 +57,18 @@ def _component_areas(components):
     return areas
 
 
+# components whose area is within this fraction of the largest one count as equally significant
+SIGNIFICANCE_TOLERANCE = 0.1
+
+
+def _pick_default_component(areas, scores):
+    """Index of the component to preselect: among the components whose area is close to the
+    largest one, the one with the best Guinier fit score (the larger area breaks ties)."""
+    top = max(areas)
+    candidates = [i for i, a in enumerate(areas) if a >= top * (1 - SIGNIFICANCE_TOLERANCE)]
+    return max(candidates, key=lambda i: (scores[i], areas[i]))
+
+
 class DenssDialog:
     def __init__(self, parent, components, analysis_folder):
         self._components = components
@@ -70,20 +82,27 @@ class DenssDialog:
         win.title("Run DENSS")
         self._win = win
 
-        rgs = []
+        rgs, scores = [], []
         areas = _component_areas(components)
-        best_i = max(range(len(components)), key=lambda i: areas[i])    # the most significant component
+        for comp in components:
+            try:
+                sg = comp.get_guinier_object()
+                rg, score = sg.Rg, sg.score
+            except Exception:
+                rg, score = None, None
+            rgs.append(rg)
+            scores.append(float(score) if score is not None else 0.0)
+        best_i = _pick_default_component(areas, scores)
         total = sum(areas)
         labels = []
-        for i, comp in enumerate(components):
-            try:
-                rg = comp.get_guinier_object().Rg
-            except Exception:
-                rg = None
-            rgs.append(rg)
-            parts = [f"Rg={rg:.1f} \u00c5"] if rg else []
+        for i in range(len(components)):
+            parts = []
+            if rgs[i]:
+                parts.append(f"Rg={rgs[i]:.1f} \u00c5")
             if total > 0:
                 parts.append(f"{areas[i] / total * 100:.0f}%")
+            if rgs[i]:
+                parts.append(f"Guinier fit {scores[i]:.2f}")
             labels.append(f"Component {i + 1}  ({', '.join(parts)})" if parts else f"Component {i + 1}")
         self._rgs = rgs
 
@@ -92,7 +111,7 @@ class DenssDialog:
         ttk.Label(sel_frame, text="Component:").pack(side=tk.LEFT)
         self._comp_var = tk.StringVar(value=labels[best_i])
         self._combo = ttk.Combobox(sel_frame, textvariable=self._comp_var, values=labels,
-                                   state="readonly", width=36)
+                                   state="readonly", width=48)
         self._combo.current(best_i)
         self._combo.pack(side=tk.LEFT, padx=8)
         self._combo.bind("<<ComboboxSelected>>", self._on_component_selected)
