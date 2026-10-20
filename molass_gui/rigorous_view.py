@@ -14,7 +14,7 @@ from tkinter import ttk
 from molass_gui.model_names import model_display_name
 from molass_gui.params_dialog import show_parameters_lazy
 from molass_gui.plot_components_dialog import show_plot_components_lazy
-from molass_gui.shape_analysis_dialog import show_shape_analysis_lazy
+from molass_gui.kratky_shape_match_dialog import show_kratky_shape_match_lazy
 from molass_gui.denss_view import show_denss_lazy
 from molass_gui.ranks_dialog import show_set_ranks_lazy
 from molass_gui.window_tree import register_window_cleanup, register_close_guard
@@ -181,7 +181,7 @@ class RigorousView:
         self._plotcomp_btn = ttk.Button(hdr, text="Plot Components\u2026",
                                         command=self._plot_components, state="disabled")
         self._shapeanalysis_btn = ttk.Button(hdr, text="Kratky Shape Match\u2026",
-                                            command=self._shape_analysis, state="disabled")
+                                            command=self._kratky_shape_match, state="disabled")
         self._denss_btn = ttk.Button(hdr, text="Run DENSS\u2026",
                                      command=self._run_denss, state="disabled")
         self._ranks_btn = ttk.Button(hdr, text="Set Ranks\u2026",
@@ -533,11 +533,11 @@ class RigorousView:
                                   self._analysis_folder, rgcurve=rgcurve,
                                   xr_ranks=self._xr_ranks)
 
-    def _shape_analysis(self):
+    def _kratky_shape_match(self):
         rgcurve = self._decomp_for_opt.get_rg_curve()
-        show_shape_analysis_lazy(self._win, self._status_var, self._decomp_for_opt,
-                                 self._analysis_folder, rgcurve=rgcurve,
-                                 xr_ranks=self._xr_ranks)
+        show_kratky_shape_match_lazy(self._win, self._status_var, self._decomp_for_opt,
+                                     self._analysis_folder, rgcurve=rgcurve,
+                                     xr_ranks=self._xr_ranks)
 
     def _run_denss(self):
         rgcurve = self._decomp_for_opt.get_rg_curve()

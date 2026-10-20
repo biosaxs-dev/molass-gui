@@ -12,9 +12,9 @@ from tkinter import ttk
 from molass.Rigorous.CurrentStateUtils import load_rigorous_result, list_rigorous_jobs
 
 
-def show_shape_analysis_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
+def show_kratky_shape_match_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
     """Load the best completed result from *analysis_folder* and show its
-    plot_shape_analysis() figure in a Toplevel dialog.
+    plot_kratky_shape_match() figure in a Toplevel dialog.
 
     Parameters
     ----------
@@ -55,7 +55,7 @@ def show_shape_analysis_lazy(win, status_var, decomp, analysis_folder, rgcurve=N
     finally:
         status_var.set(prev)
 
-    plot_result = result.plot_shape_analysis()
+    plot_result = result.plot_kratky_shape_match()
 
     dlg = tk.Toplevel(win)
     dlg.title("Kratky Shape Match")
