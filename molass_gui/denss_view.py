@@ -40,6 +40,23 @@ def show_denss_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_r
     DenssDialog(win, components, analysis_folder)
 
 
+def _component_areas(components):
+    """Elution-curve area of each component (0 if it cannot be computed); the relative
+    areas are the components' proportions, i.e. how significant each one is."""
+    import warnings
+
+    areas = []
+    for comp in components:
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")     # scipy IntegrationWarning on noisy curves
+                area = float(comp.compute_area())
+        except Exception:
+            area = 0.0
+        areas.append(area if area > 0 else 0.0)
+    return areas
+
+
 class DenssDialog:
     def __init__(self, parent, components, analysis_folder):
         self._components = components
@@ -54,18 +71,20 @@ class DenssDialog:
         self._win = win
 
         rgs = []
-        best_i, best_score = 0, -1
+        areas = _component_areas(components)
+        best_i = max(range(len(components)), key=lambda i: areas[i])    # the most significant component
+        total = sum(areas)
         labels = []
         for i, comp in enumerate(components):
             try:
-                sg = comp.get_guinier_object()
-                rg, score = sg.Rg, sg.score
+                rg = comp.get_guinier_object().Rg
             except Exception:
-                rg, score = None, 0
+                rg = None
             rgs.append(rg)
-            if score is not None and score > best_score:
-                best_score, best_i = score, i
-            labels.append(f"Component {i + 1}  (Rg={rg:.1f} \u00c5)" if rg else f"Component {i + 1}")
+            parts = [f"Rg={rg:.1f} \u00c5"] if rg else []
+            if total > 0:
+                parts.append(f"{areas[i] / total * 100:.0f}%")
+            labels.append(f"Component {i + 1}  ({', '.join(parts)})" if parts else f"Component {i + 1}")
         self._rgs = rgs
 
         sel_frame = ttk.Frame(win, padding=8)
@@ -73,7 +92,7 @@ class DenssDialog:
         ttk.Label(sel_frame, text="Component:").pack(side=tk.LEFT)
         self._comp_var = tk.StringVar(value=labels[best_i])
         self._combo = ttk.Combobox(sel_frame, textvariable=self._comp_var, values=labels,
-                                   state="readonly", width=28)
+                                   state="readonly", width=36)
         self._combo.current(best_i)
         self._combo.pack(side=tk.LEFT, padx=8)
         self._combo.bind("<<ComboboxSelected>>", self._on_component_selected)
