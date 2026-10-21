@@ -93,5 +93,27 @@ def show_kratky_shape_match_lazy(win, status_var, decomp, analysis_folder, rgcur
     btn_row.pack(pady=8)
     from molass_gui.plot_embed import close_dialog_figure
     _close = lambda: close_dialog_figure(dlg, plot_result.fig)
+
+    series = {}
+
+    def _show_series():
+        from matplotlib.figure import Figure
+        from molass_gui.plot_embed import embed_plot, close_dialog_figure as _cdf
+
+        sdlg = series.get("dlg")
+        if sdlg is not None and sdlg.winfo_exists():
+            sdlg.lift()
+            return
+        sdlg = tk.Toplevel(dlg)
+        sdlg.title("Kratky plots of all components")
+        sfig = Figure(figsize=(12, 5.2))
+        result.plot_kratky_series(fig=sfig)
+        embed_plot(sdlg, sfig)
+        _sclose = lambda: _cdf(sdlg, sfig)
+        ttk.Button(sdlg, text="Close", command=_sclose).pack(pady=8)
+        sdlg.protocol("WM_DELETE_WINDOW", _sclose)
+        series["dlg"] = sdlg
+
+    ttk.Button(btn_row, text="Compare components", command=_show_series).pack(side=tk.LEFT, padx=4)
     ttk.Button(btn_row, text="Close", command=_close).pack(side=tk.LEFT, padx=4)
     dlg.protocol("WM_DELETE_WINDOW", _close)
