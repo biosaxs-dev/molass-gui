@@ -109,11 +109,22 @@ off.
 
 When it's done, use **Run DENSS…** for 3D shape reconstruction (its **View…**
 button opens the resulting `.mrc` map in an interactive viewer — rotate the
-isosurface or voxel scatter with the mouse; in a notebook the same viewer is
+isosurface or voxel scatter with the mouse, read the three central slices
+(in Å, with the density threshold drawn as a white contour line) and the
+shared density colour bar; in a notebook the same viewer is
 `molass.SAXS.MrcViewer.show_mrc_views(path)`),
-**Kratky Shape Match…** or **Plot Components…** to inspect the final result, or
-**Export to Notebook…** at any phase to continue in a real Jupyter notebook
-— the escape hatch for anything this wizard doesn't expose a button for.
+**Kratky Shape Match…** or **Plot Components…** to inspect the final result
+(the Plot Components window has its own **Kratky Shape Match…** button for the
+result it shows), or **Export to Notebook…** at any phase to continue in a real
+Jupyter notebook — the escape hatch for anything this wizard doesn't expose a
+button for.
+
+**Export Data…** (in the Quick and Upgraded views and in Plot Components)
+asks for a file format (`.dat` or `.csv`) and a folder, and writes the
+component scattering profiles together with the XR and UV elution curves, the
+UV spectra, the Guinier results, the Rg curve and a `summary.json` — enough to
+reproduce the figures or to continue in Excel, Origin, IGOR or pandas. In a
+notebook the same export is `decomp.export(folder, fmt="csv")`.
 
 ## Next steps
 
