@@ -43,30 +43,32 @@ def close_dialog_figure(dlg, fig):
     dlg.destroy()
 
 
-def export_component_data(result, parent_win):
-    """Write each XR component's jcurve array to '<folder>/component_{i+1}.dat'.
+def export_component_data(result, parent_win, rgcurve=None):
+    """Export the decomposition shown in the view to a user-chosen folder.
 
-    Works with any object exposing export_xr_components() -- a plain
-    Decomposition (QuickView/UpgradedView) or a rigorous result (Plot
-    Components dialog). Delegates the actual file-writing to
-    ``Decomposition.export_xr_components()`` (same format/convention as the
-    tutorial's "How to Export" section, quick_start.ipynb) so the GUI and
-    scripts/notebooks share one implementation instead of duplicating the
-    ``np.savetxt`` loop.
+    Works with a plain Decomposition (QuickView/UpgradedView) or a rigorous
+    result (Plot Components dialog). Delegates the file-writing to
+    ``Decomposition.export()`` -- component profiles plus elution curves, UV,
+    Guinier results, the Rg curve and a summary.json (molass-library#319) --
+    so the GUI and scripts/notebooks share one implementation. *rgcurve* is
+    the Rg curve the view already computed, so it is written without
+    recomputation. Older molass versions without ``export()`` fall back to
+    ``export_xr_components()`` (component profiles only).
     """
     folder = filedialog.askdirectory(title="Select export folder", parent=parent_win)
     if not folder:
         return
 
     try:
-        paths = result.export_xr_components(folder)
+        if hasattr(result, 'export'):
+            paths = result.export(folder, rgcurve=rgcurve)
+            message = f"Exported {len(paths)} file(s) to:\n{folder}"
+        else:
+            paths = result.export_xr_components(folder)
+            message = f"Exported {len(paths)} component curve(s) to:\n{folder}"
     except Exception as exc:
         messagebox.showerror("Export failed", str(exc), parent=parent_win)
         return
 
-    messagebox.showinfo(
-        "Export complete",
-        f"Exported {len(paths)} component curve(s) to:\n{folder}",
-        parent=parent_win,
-    )
+    messagebox.showinfo("Export complete", message, parent=parent_win)
 

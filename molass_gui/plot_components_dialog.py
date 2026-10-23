@@ -55,9 +55,14 @@ def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=
                 parent=win,
             )
             return
-        jobid = min(jobs, key=lambda j: j.best_fv).id
+        best = min(jobs, key=lambda j: j.best_fv)
+        jobid = best.id
         result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve,
                                       xr_ranks=xr_ranks)
+        # Same convention as RunInfo.load_best(); lets export() record SV/FV.
+        from molass.Rigorous.CurrentStateUtils import fv_to_sv
+        result.fv = best.best_fv
+        result.sv = float(fv_to_sv(best.best_fv))
     finally:
         status_var.set(prev)
 
@@ -74,7 +79,7 @@ def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=
     btn_row = ttk.Frame(dlg)
     btn_row.pack(pady=8)
     ttk.Button(btn_row, text="Export Data\u2026",
-              command=lambda: export_component_data(result, dlg)).pack(side=tk.LEFT, padx=4)
+              command=lambda: export_component_data(result, dlg, rgcurve=rgcurve)).pack(side=tk.LEFT, padx=4)
     _close = lambda: close_dialog_figure(dlg, plot_result.fig)
     ttk.Button(btn_row, text="Close", command=_close).pack(side=tk.LEFT, padx=4)
     dlg.protocol("WM_DELETE_WINDOW", _close)

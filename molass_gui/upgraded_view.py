@@ -126,7 +126,7 @@ class UpgradedView:
         export_and_open(self._ctx, self._win)
 
     def _export_data(self):
-        export_component_data(self._decomp, self._win)
+        export_component_data(self._decomp, self._win, rgcurve=self._rgcurve)
 
     def _proceed_rigorous(self):
         from tkinter import filedialog
