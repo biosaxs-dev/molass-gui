@@ -30,8 +30,6 @@ def show_kratky_shape_match_lazy(win, status_var, decomp, analysis_folder, rgcur
     xr_ranks : list of int, optional
         Per-component rank override, same as show_plot_components_lazy().
     """
-    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-
     prev = status_var.get()
     status_var.set("Loading current result\u2026")
     win.update_idletasks()
@@ -54,6 +52,19 @@ def show_kratky_shape_match_lazy(win, status_var, decomp, analysis_folder, rgcur
                                       xr_ranks=xr_ranks)
     finally:
         status_var.set(prev)
+
+    show_kratky_shape_match_for_result(win, result)
+
+
+def show_kratky_shape_match_for_result(win, result):
+    """Show the Kratky Shape Match dialog for an already-loaded *result*.
+
+    Lets other dialogs (e.g. Plot Components) show the diagnostic for exactly
+    the result they display, without reloading from disk. *win* should be a
+    long-lived window (the main view, not the calling dialog), so closing the
+    caller doesn't destroy this dialog's Toplevel without releasing its figure.
+    """
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
     dlg = tk.Toplevel(win)
     dlg.title("Kratky Shape Match")

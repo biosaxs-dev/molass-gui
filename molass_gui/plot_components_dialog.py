@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from molass_gui.plot_embed import export_component_data
+from molass_gui.kratky_shape_match_dialog import show_kratky_shape_match_for_result
 
 
 def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
@@ -80,6 +81,8 @@ def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=
     btn_row.pack(pady=8)
     ttk.Button(btn_row, text="Export Data\u2026",
               command=lambda: export_component_data(result, dlg, rgcurve=rgcurve)).pack(side=tk.LEFT, padx=4)
+    ttk.Button(btn_row, text="Kratky Shape Match\u2026",
+              command=lambda: show_kratky_shape_match_for_result(win, result)).pack(side=tk.LEFT, padx=4)
     _close = lambda: close_dialog_figure(dlg, plot_result.fig)
     ttk.Button(btn_row, text="Close", command=_close).pack(side=tk.LEFT, padx=4)
     dlg.protocol("WM_DELETE_WINDOW", _close)
