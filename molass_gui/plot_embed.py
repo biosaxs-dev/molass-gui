@@ -3,7 +3,7 @@ already-embedded plot in place (e.g. once a background computation like the Rg c
 becomes ready and the figure needs to be redrawn with it overlaid)."""
 import gc
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
@@ -43,6 +43,50 @@ def close_dialog_figure(dlg, fig):
     dlg.destroy()
 
 
+_last_export_format = 'dat'
+
+
+def ask_export_options(parent_win):
+    """Modal dialog: choose the file format, then the destination folder.
+
+    Returns ``(folder, fmt)``, or None if cancelled. The last format used is
+    preselected on the next call.
+    """
+    global _last_export_format
+    result = {}
+
+    dlg = tk.Toplevel(parent_win)
+    dlg.title("Export Data")
+    dlg.transient(parent_win)
+    fmt_var = tk.StringVar(master=dlg, value=_last_export_format)
+
+    frame = ttk.Frame(dlg, padding=12)
+    frame.pack(fill=tk.BOTH, expand=True)
+    ttk.Label(frame, text="File format:").pack(anchor=tk.W)
+    ttk.Radiobutton(frame, text=".dat  (whitespace-delimited, '# ' header; np.loadtxt, IGOR)",
+                    variable=fmt_var, value='dat').pack(anchor=tk.W, padx=12)
+    ttk.Radiobutton(frame, text=".csv  (comma-delimited, header row; Excel, pandas)",
+                    variable=fmt_var, value='csv').pack(anchor=tk.W, padx=12)
+
+    def _choose():
+        folder = filedialog.askdirectory(title="Select export folder", parent=dlg)
+        if folder:
+            result['value'] = (folder, fmt_var.get())
+            dlg.destroy()
+
+    row = ttk.Frame(frame)
+    row.pack(pady=(12, 0))
+    ttk.Button(row, text="Choose Folder\u2026", command=_choose).pack(side=tk.LEFT, padx=4)
+    ttk.Button(row, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=4)
+
+    dlg.grab_set()
+    dlg.wait_window()
+    if 'value' not in result:
+        return None
+    _last_export_format = result['value'][1]
+    return result['value']
+
+
 def export_component_data(result, parent_win, rgcurve=None):
     """Export the decomposition shown in the view to a user-chosen folder.
 
@@ -53,15 +97,16 @@ def export_component_data(result, parent_win, rgcurve=None):
     so the GUI and scripts/notebooks share one implementation. *rgcurve* is
     the Rg curve the view already computed, so it is written without
     recomputation. Older molass versions without ``export()`` fall back to
-    ``export_xr_components()`` (component profiles only).
+    ``export_xr_components()`` (component profiles only, always ``.dat``).
     """
-    folder = filedialog.askdirectory(title="Select export folder", parent=parent_win)
-    if not folder:
+    options = ask_export_options(parent_win)
+    if options is None:
         return
+    folder, fmt = options
 
     try:
         if hasattr(result, 'export'):
-            paths = result.export(folder, rgcurve=rgcurve)
+            paths = result.export(folder, fmt=fmt, rgcurve=rgcurve)
             message = f"Exported {len(paths)} file(s) to:\n{folder}"
         else:
             paths = result.export_xr_components(folder)
