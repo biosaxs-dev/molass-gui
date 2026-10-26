@@ -108,6 +108,10 @@ class QuickView:
                   command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
         ttk.Button(hdr, text="Export Data\u2026",
                   command=self._export_data).pack(side=tk.RIGHT, padx=8)
+        # Needs the Rg curve (I(0)) -- enabled in _on_rgcurve_ready like Show Parameters.
+        self._homog_btn = ttk.Button(hdr, text="Homogeneity\u2026",
+                                     command=self._show_homogeneity, state="disabled")
+        self._homog_btn.pack(side=tk.RIGHT, padx=8)
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
             side=tk.LEFT, padx=8)
@@ -213,6 +217,11 @@ class QuickView:
         self._redraw()
         self._action_btn.state(["!disabled"])
         self._params_btn.state(["!disabled"])
+        self._homog_btn.state(["!disabled"])
+
+    def _show_homogeneity(self):
+        from molass_gui.homogeneity_dialog import show_homogeneity
+        show_homogeneity(self._win, self._status_var, self._decomp.ssd, self._rgcurve)
 
     def _show_parameters(self):
         # Lazy build (Option B): first click here pays the one-time score()

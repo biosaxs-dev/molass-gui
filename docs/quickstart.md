@@ -126,6 +126,20 @@ UV spectra, the Guinier results, the Rg curve and a `summary.json` — enough to
 reproduce the figures or to continue in Excel, Origin, IGOR or pandas. In a
 notebook the same export is `decomp.export(folder, fmt="csv")`.
 
+**Homogeneity…** (in the Quick view, once the $R_g$ curve is ready) asks whether
+a peak behaves like a single species. It plots ratios of concentration
+proxies — $I(0)$, $I(q)$ and the UV absorbance $A(\lambda)$ — across each peak
+core: the classical $I(0)/I(q_1)$ and $I(0)/A_{280}$ (black/gray) plus
+$I(q_1)/I(q_2)$, $A_{260}/A_{280}$, $A_{280}/A_{290}$ and $A_{320}/A_{280}$. A ratio
+is flat across a peak of one species. Pick other ratios with the check-button
+matrix (row = numerator, column = denominator, presets above it; add a proxy
+such as `I(0.03)` or `A250`). XR-only and UV-only ratios do not depend on the
+UV→XR mapping, XR/UV ratios (dashed) do: shift the mapping with the slider to
+see which curves move. A mapping error shows as a *tilt* of the XR/UV ratios, a
+concentration effect as a *curvature*. The table below the plot gives the
+statistics; there is deliberately no pure/impure verdict. In a notebook:
+`result = corrected.homogeneity(); print(result.summary()); result.plot()`.
+
 ## Next steps
 
 - Try your own data instead of `SAMPLE1` — same five steps.
