@@ -140,6 +140,15 @@ concentration effect as a *curvature*. The table below the plot gives the
 statistics; there is deliberately no pure/impure verdict. In a notebook:
 `result = corrected.homogeneity(); print(result.summary()); result.plot()`.
 
+In the rigorous view, **Homogeneity…** (next to **Plot Components…**) opens the
+same analysis for the best result so far and adds a choice between the
+*estimated* UV→XR mapping and the *optimized* one the rigorous run fitted (the
+dialog shows how far they differ, in XR frames at each peak). A peak whose
+$I(0)/A_{280}$ is tilted only with the estimated mapping had a mapping error;
+a hump that remains with the optimized mapping, together with changing UV-only
+ratios ($A_{260}/A_{280}$), points to a mixture. In a notebook:
+`result.homogeneity()` on the rigorous result.
+
 ## Next steps
 
 - Try your own data instead of `SAMPLE1` — same five steps.

@@ -29,11 +29,44 @@ def show_homogeneity(win, status_var, ssd, rgcurve):
     HomogeneityDialog(win, ssd, rgcurve, first)
 
 
+def show_homogeneity_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
+    """Rigorous stage: load the best completed result from *analysis_folder* and open the Homogeneity
+    dialog with the result's optimized UV->XR mapping offered next to the estimated one.
+
+    Same job selection as Plot Components (the true global best, not just the latest).
+    """
+    from tkinter import messagebox
+    from molass.Rigorous.CurrentStateUtils import load_rigorous_result, list_rigorous_jobs
+
+    prev = status_var.get()
+    status_var.set("Loading current result\u2026")
+    win.update_idletasks()
+    try:
+        jobs = list_rigorous_jobs(analysis_folder)
+        if not jobs:
+            messagebox.showinfo(
+                "No results yet",
+                "The optimization hasn't produced its first result yet.\n"
+                "Try again in a moment.",
+                parent=win,
+            )
+            return
+        jobid = min(jobs, key=lambda j: j.best_fv).id
+        result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve, xr_ranks=xr_ranks)
+        ssd = decomp.ssd
+        first = ssd.homogeneity(rgcurve=rgcurve)
+        optimized = result.get_uv_mapping() if ssd.uv is not None else None
+    finally:
+        status_var.set(prev)
+    HomogeneityDialog(win, ssd, rgcurve, first, optimized_mapping=optimized)
+
+
 class HomogeneityDialog:
-    def __init__(self, win, ssd, rgcurve, first):
+    def __init__(self, win, ssd, rgcurve, first, optimized_mapping=None):
         self._ssd, self._rgcurve = ssd, rgcurve
         self._q1, self._q2 = first.q1, first.q2
         self._has_uv = ssd.uv is not None
+        self._optimized = optimized_mapping
         self._auto_cores = list(first.cores)
         self._cores = list(first.cores)
         self._names = default_proxy_names(self._q1, self._q2, self._has_uv)
@@ -48,6 +81,20 @@ class HomogeneityDialog:
         left.pack(side=tk.LEFT, fill=tk.Y)
         right = ttk.Frame(dlg)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self._map_var = tk.StringVar(master=dlg, value="optimized" if optimized_mapping is not None else "estimated")
+        if optimized_mapping is not None and self._has_uv:
+            from molass.Homogeneity import mapping_shift
+            centers = [(a + b) / 2 for a, b in self._cores]
+            shifts = mapping_shift(ssd.get_mapping(), optimized_mapping, centers)
+            info = "; ".join(f"{s:+.2f} at frame {c:.0f}" for s, c in zip(shifts, centers))
+            ttk.Label(left, text="UV->XR mapping:").pack(anchor=tk.W)
+            ttk.Radiobutton(left, text="Estimated (quick)", variable=self._map_var, value="estimated",
+                            command=self._recompute).pack(anchor=tk.W, padx=12)
+            ttk.Radiobutton(left, text="Optimized (rigorous)", variable=self._map_var, value="optimized",
+                            command=self._recompute).pack(anchor=tk.W, padx=12)
+            ttk.Label(left, text=f"optimized vs estimated, equivalent shift in XR frames: {info}",
+                      foreground="gray", wraplength=300, justify=tk.LEFT).pack(anchor=tk.W, pady=(2, 8))
 
         ttk.Label(left, text="Ratio set:").pack(anchor=tk.W)
         self._preset_var = tk.StringVar(master=dlg, value="Default")
@@ -72,7 +119,7 @@ class HomogeneityDialog:
         ttk.Label(left, text="e.g. I(0.03), A250", foreground="gray").pack(anchor=tk.W)
 
         if self._has_uv:
-            ttk.Label(left, text="\nShift of the UV->XR mapping (frames, + = later):").pack(anchor=tk.W)
+            ttk.Label(left, text="\nExtra shift on top of the mapping (frames, + = later):").pack(anchor=tk.W)
             self._delta_var = tk.DoubleVar(master=dlg, value=0.0)
             self._delta_text = tk.StringVar(master=dlg, value="+0.00")
             srow = ttk.Frame(left)
@@ -194,14 +241,18 @@ class HomogeneityDialog:
             return
         self._busy = True
         try:
+            mapping = self._optimized if self._map_var.get() == "optimized" else None
             result = self._ssd.homogeneity(pairs=pairs, delta=round(float(self._delta_var.get()), 2), q1=self._q1,
-                                           q2=self._q2, cores=self._cores, rgcurve=self._rgcurve)
+                                           q2=self._q2, cores=self._cores, rgcurve=self._rgcurve, mapping=mapping)
             self._status_var.set("; ".join(result.skipped))
             fig = result.plot(figsize=(9, 6))
+            kind = "optimized" if mapping is not None else "estimated"
+            fig.axes[1].set_title(f"* depends on the UV->XR mapping ({kind}, extra shift {result.delta:+g} frame); "
+                                  f"{result.independent_axes} independent axes", fontsize=9)
             self._plot_state = embed_plot(self._plot_frame, fig, previous=self._plot_state)
             self._text.configure(state="normal")
             self._text.delete("1.0", tk.END)
-            self._text.insert("1.0", result.summary())
+            self._text.insert("1.0", f"mapping: {kind}\n" + result.summary())
             self._text.configure(state="disabled")
         except Exception as exc:
             self._status_var.set(f"{type(exc).__name__}: {exc}")
