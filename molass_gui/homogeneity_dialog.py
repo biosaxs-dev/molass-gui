@@ -17,16 +17,56 @@ _HELP = ("Ratio of two concentration proxies is flat across a peak of one specie
          "gives a tilt, a concentration effect a curvature. Curves and statistics only - no verdict.")
 
 
+def _with_i0(win, status_var, ssd, rgcurve, then):
+    """Call ``then(rgcurve_with_i0)``. An Rg curve restored from disk (Open Existing Analysis) has no I(0):
+    the Guinier fits (about 30 s) then run in a background thread first, with a status message."""
+    import threading
+    import numpy as np
+    i0s = getattr(rgcurve, "i0s", None)
+    if i0s is not None and np.isfinite(np.asarray(i0s, dtype=float)).any():
+        then(rgcurve)
+        return
+    from molass.Homogeneity import ensure_i0_rgcurve
+    prev = status_var.get()
+    status_var.set("Computing I(0) from Guinier fits (about 30 s)\u2026")
+    box = {}
+
+    def worker():
+        try:
+            box["rg"] = ensure_i0_rgcurve(ssd, rgcurve)
+        except Exception as exc:
+            box["err"] = exc
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+
+    def poll():
+        if thread.is_alive():
+            win.after(300, poll)
+            return
+        status_var.set(prev)
+        if "err" in box:
+            from molass_gui.error_dialog import show_error_detail
+            show_error_detail(win, status_var, str(box["err"]), title="Homogeneity failed")
+            return
+        then(box["rg"])
+
+    win.after(300, poll)
+
+
 def show_homogeneity(win, status_var, ssd, rgcurve):
     """Open the Homogeneity dialog for the corrected ``ssd`` (needs the per-frame ``rgcurve`` for I(0))."""
-    prev = status_var.get()
-    status_var.set("Computing homogeneity\u2026")
-    win.update_idletasks()
-    try:
-        first = ssd.homogeneity(rgcurve=rgcurve)
-    finally:
-        status_var.set(prev)
-    HomogeneityDialog(win, ssd, rgcurve, first)
+    def open_dialog(rg):
+        prev = status_var.get()
+        status_var.set("Computing homogeneity\u2026")
+        win.update_idletasks()
+        try:
+            first = ssd.homogeneity(rgcurve=rg)
+        finally:
+            status_var.set(prev)
+        HomogeneityDialog(win, ssd, rg, first)
+
+    _with_i0(win, status_var, ssd, rgcurve, open_dialog)
 
 
 def show_homogeneity_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
@@ -54,11 +94,15 @@ def show_homogeneity_lazy(win, status_var, decomp, analysis_folder, rgcurve=None
         jobid = min(jobs, key=lambda j: j.best_fv).id
         result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve, xr_ranks=xr_ranks)
         ssd = decomp.ssd
-        first = ssd.homogeneity(rgcurve=rgcurve)
         optimized = result.get_uv_mapping() if ssd.uv is not None else None
     finally:
         status_var.set(prev)
-    HomogeneityDialog(win, ssd, rgcurve, first, optimized_mapping=optimized)
+
+    def open_dialog(rg):
+        first = ssd.homogeneity(rgcurve=rg)
+        HomogeneityDialog(win, ssd, rg, first, optimized_mapping=optimized)
+
+    _with_i0(win, status_var, ssd, rgcurve, open_dialog)
 
 
 class HomogeneityDialog:
