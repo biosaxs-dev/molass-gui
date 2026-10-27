@@ -220,8 +220,9 @@ class QuickView:
         self._homog_btn.state(["!disabled"])
 
     def _show_homogeneity(self):
-        from molass_gui.homogeneity_dialog import show_homogeneity
-        show_homogeneity(self._win, self._status_var, self._decomp.ssd, self._rgcurve)
+        from molass_gui.homogeneity_dialog import show_homogeneity, _heading
+        show_homogeneity(self._win, self._status_var, self._decomp.ssd, self._rgcurve,
+                         stage="Quick", heading=_heading(self._decomp))
 
     def _show_parameters(self):
         # Lazy build (Option B): first click here pays the one-time score()

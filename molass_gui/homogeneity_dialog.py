@@ -9,7 +9,8 @@ import tkinter as tk
 from tkinter import ttk
 
 from molass_gui.homogeneity_logic import (PRESETS, default_proxy_names, normalize_proxy_name, preset_pairs,
-                                          pairs_from_matrix, parse_cores, format_cores)
+                                          pairs_from_matrix, parse_cores, format_cores, window_title,
+                                          figure_title)
 from molass_gui.plot_embed import embed_plot, close_dialog_figure
 
 _HELP = ("Ratio of two concentration proxies is flat across a peak of one species. XR-only ratios (size/shape) and "
@@ -54,11 +55,12 @@ def _with_i0(win, status_var, ssd, rgcurve, then):
     win.after(300, poll)
 
 
-def show_homogeneity(win, status_var, ssd, rgcurve, optimized_mapping=None):
+def show_homogeneity(win, status_var, ssd, rgcurve, optimized_mapping=None, stage=None, heading=None):
     """Open the Homogeneity dialog for the corrected ``ssd`` (needs the per-frame ``rgcurve`` for I(0)).
 
     ``optimized_mapping`` (see ``homogeneity_logic.optimized_mapping_of``) offers the mapping of
-    optimized UV curves next to the estimated one."""
+    optimized UV curves next to the estimated one. ``stage`` (window title) and ``heading`` (the
+    ``dataset | model | method`` line, e.g. ``make_auto_title(decomp)``) tell the figure's stage."""
     def open_dialog(rg):
         prev = status_var.get()
         status_var.set("Computing homogeneity\u2026")
@@ -67,7 +69,7 @@ def show_homogeneity(win, status_var, ssd, rgcurve, optimized_mapping=None):
             first = ssd.homogeneity(rgcurve=rg)
         finally:
             status_var.set(prev)
-        HomogeneityDialog(win, ssd, rg, first, optimized_mapping=optimized_mapping)
+        HomogeneityDialog(win, ssd, rg, first, optimized_mapping=optimized_mapping, stage=stage, heading=heading)
 
     _with_i0(win, status_var, ssd, rgcurve, open_dialog)
 
@@ -94,14 +96,26 @@ def show_homogeneity_lazy(win, status_var, decomp, analysis_folder, rgcurve=None
 
     def open_dialog(rg):
         first = ssd.homogeneity(rgcurve=rg)
-        HomogeneityDialog(win, ssd, rg, first, optimized_mapping=optimized)
+        HomogeneityDialog(win, ssd, rg, first, optimized_mapping=optimized, stage="Rigorous",
+                          heading=_heading(result))
 
     _with_i0(win, status_var, ssd, rgcurve, open_dialog)
 
 
+def _heading(decomp):
+    """The ``dataset | model | method`` line of the Plot Components figure for *decomp* (None if the
+    installed molass cannot make it)."""
+    try:
+        from molass.PlotUtils.DecompositionPlot import make_auto_title
+        return make_auto_title(decomp)
+    except Exception:
+        return None
+
+
 class HomogeneityDialog:
-    def __init__(self, win, ssd, rgcurve, first, optimized_mapping=None):
+    def __init__(self, win, ssd, rgcurve, first, optimized_mapping=None, stage=None, heading=None):
         self._ssd, self._rgcurve = ssd, rgcurve
+        self._heading = heading
         self._q1, self._q2 = first.q1, first.q2
         self._has_uv = ssd.uv is not None
         self._optimized = optimized_mapping
@@ -112,7 +126,7 @@ class HomogeneityDialog:
         self._busy = False
 
         dlg = self._dlg = tk.Toplevel(win)
-        dlg.title("Homogeneity")
+        dlg.title(window_title(stage))
         dlg.geometry("1300x900")
 
         left = ttk.Frame(dlg, padding=8)
@@ -283,8 +297,8 @@ class HomogeneityDialog:
             result = self._ssd.homogeneity(pairs=pairs, delta=round(float(self._delta_var.get()), 2), q1=self._q1,
                                            q2=self._q2, cores=self._cores, rgcurve=self._rgcurve, mapping=mapping)
             self._status_var.set("; ".join(result.skipped))
-            fig = result.plot(figsize=(9, 6))
             kind = "optimized" if mapping is not None else "estimated"
+            fig = result.plot(figsize=(9, 6), title=figure_title(self._heading, kind))
             fig.axes[1].set_title(f"* depends on the UV->XR mapping ({kind}, extra shift {result.delta:+g} frame); "
                                   f"{result.independent_axes} independent axes", fontsize=9)
             self._plot_state = embed_plot(self._plot_frame, fig, previous=self._plot_state)

@@ -61,6 +61,16 @@ def test_parse_and_format_cores():
             parse_cores(bad)
 
 
+def test_stage_and_figure_titles():
+    from molass_gui.homogeneity_logic import window_title, figure_title
+    assert window_title("Quick") == "Homogeneity \u2014 Quick"
+    assert window_title("Upgraded \u2014 SDM") == "Homogeneity \u2014 Upgraded \u2014 SDM"
+    assert window_title(None) == "Homogeneity"
+    line = "SAMPLE1 | model: SDM | method: quick decomposition + model upgrade"
+    assert figure_title(line, "estimated") == line + " | mapping: estimated"
+    assert figure_title(None, "optimized") is None
+
+
 def test_optimized_mapping_of_is_none_unless_the_uv_curves_use_another_mapping():
     from types import SimpleNamespace
     from molass_gui.homogeneity_logic import optimized_mapping_of

@@ -127,10 +127,12 @@ class UpgradedView:
     def _show_homogeneity(self):
         # the analysis does not depend on the elution model; an optimized UV mapping, if this
         # decomposition has one, is offered next to the estimated one
-        from molass_gui.homogeneity_dialog import show_homogeneity
+        from molass_gui.homogeneity_dialog import show_homogeneity, _heading
         from molass_gui.homogeneity_logic import optimized_mapping_of
         show_homogeneity(self._win, self._status_var, self._decomp.ssd, self._rgcurve,
-                         optimized_mapping=optimized_mapping_of(self._decomp))
+                         optimized_mapping=optimized_mapping_of(self._decomp),
+                         stage=f"Upgraded \u2014 {model_display_name(self._model_info['model'])}",
+                         heading=_heading(self._decomp))
 
     def _show_parameters(self):
         show_parameters_lazy(self, self._win, self._status_var, self._decomp, self._trimmed)

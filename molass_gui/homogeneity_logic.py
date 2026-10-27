@@ -75,6 +75,17 @@ def format_cores(cores):
     return ", ".join(f"{a}-{b}" for a, b in cores)
 
 
+def window_title(stage):
+    """Title of the dialog window; the stage (Quick / Upgraded -- <model> / Rigorous) tells the figures apart."""
+    return f"Homogeneity \u2014 {stage}" if stage else "Homogeneity"
+
+
+def figure_title(heading, kind):
+    """Suptitle of the figure: the ``dataset | model | method`` heading of the decomposition (the same line
+    as the Plot Components figure) and which UV->XR mapping was used ('estimated' or 'optimized')."""
+    return f"{heading} | mapping: {kind}" if heading else None
+
+
 def optimized_mapping_of(decomp):
     """The UV->XR mapping the UV curves of *decomp* use when it differs from the estimated mapping of
     its data (a rigorous result, or a decomposition whose UV curves were optimized), else ``None``."""
