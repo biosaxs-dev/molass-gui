@@ -75,24 +75,15 @@ def show_homogeneity_lazy(win, status_var, decomp, analysis_folder, rgcurve=None
 
     Same job selection as Plot Components (the true global best, not just the latest).
     """
-    from tkinter import messagebox
-    from molass.Rigorous.CurrentStateUtils import load_rigorous_result, list_rigorous_jobs
+    from molass_gui.best_result import load_best_result
 
     prev = status_var.get()
     status_var.set("Loading current result\u2026")
     win.update_idletasks()
     try:
-        jobs = list_rigorous_jobs(analysis_folder)
-        if not jobs:
-            messagebox.showinfo(
-                "No results yet",
-                "The optimization hasn't produced its first result yet.\n"
-                "Try again in a moment.",
-                parent=win,
-            )
+        result = load_best_result(win, decomp, analysis_folder, rgcurve=rgcurve, xr_ranks=xr_ranks)
+        if result is None:
             return
-        jobid = min(jobs, key=lambda j: j.best_fv).id
-        result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve, xr_ranks=xr_ranks)
         ssd = decomp.ssd
         optimized = result.get_uv_mapping() if ssd.uv is not None else None
     finally:

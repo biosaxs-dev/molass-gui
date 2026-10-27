@@ -6,7 +6,7 @@ the whole point is to see the CURRENT best, which may have improved since
 the dialog was last opened (e.g. after Resume produces new jobs).
 """
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
 from molass_gui.plot_embed import export_component_data
 from molass_gui.kratky_shape_match_dialog import show_kratky_shape_match_for_result
@@ -32,38 +32,18 @@ def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=
         back to ``decomp.xr_ranks`` when None (see ``load_rigorous_result``).
     """
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-    from molass.Rigorous.CurrentStateUtils import load_rigorous_result, list_rigorous_jobs
+    from molass_gui.best_result import load_best_result
     from molass_gui.plot_embed import close_dialog_figure
 
     prev = status_var.get()
     status_var.set("Loading current result\u2026")
     win.update_idletasks()
     try:
-        # load_rigorous_result(jobid=None) defaults to the LATEST job, not the
-        # best one -- pass the true global-best id explicitly so this always
-        # matches the SV already shown in the header panels (confirmed to
-        # diverge in practice: a later job can be marginally worse than an
-        # earlier one, e.g. a reseeded round that hasn't yet improved on it).
-        jobs = list_rigorous_jobs(analysis_folder)
-        if not jobs:
-            # e.g. clicked right after launch -- callback.txt only has the
-            # init-params entry, no search step has completed yet (issue #188
-            # guard in list_rigorous_jobs excludes it) -- not an error.
-            messagebox.showinfo(
-                "No results yet",
-                "The optimization hasn't produced its first result yet.\n"
-                "Try again in a moment.",
-                parent=win,
-            )
+        # the true global best, not just the latest job, so this always matches the SV already shown
+        # in the header panels; result.fv / result.sv are attached (lets export() record SV/FV)
+        result = load_best_result(win, decomp, analysis_folder, rgcurve=rgcurve, xr_ranks=xr_ranks)
+        if result is None:
             return
-        best = min(jobs, key=lambda j: j.best_fv)
-        jobid = best.id
-        result = load_rigorous_result(decomp, analysis_folder, jobid=jobid, rgcurve=rgcurve,
-                                      xr_ranks=xr_ranks)
-        # Same convention as RunInfo.load_best(); lets export() record SV/FV.
-        from molass.Rigorous.CurrentStateUtils import fv_to_sv
-        result.fv = best.best_fv
-        result.sv = float(fv_to_sv(best.best_fv))
     finally:
         status_var.set(prev)
 
