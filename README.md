@@ -2,7 +2,8 @@
 
 Tkinter GUI for [Molass](https://github.com/biosaxs-dev/molass-library) — progressive SEC-SAXS analysis workflow.
 
-📖 **New here? See the [Quick Start guide with screenshots](https://biosaxs-dev.github.io/molass-gui/quickstart)**
+📖 **New here? Visit the [molass-gui website](https://biosaxs-dev.github.io/molass-gui/)**
+for the Quick Start guide with screenshots
 (no Python required — [Windows portable download](https://biosaxs-dev.github.io/molass-gui/installation), no installer, no admin rights).
 
 ## Five-phase workflow
