@@ -91,8 +91,13 @@ class UpgradedView:
                   command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
         ttk.Button(hdr, text="Export Data\u2026",
                   command=self._export_data).pack(side=tk.RIGHT, padx=8)
+        # Needs the Rg curve (I(0)) -- enabled once it is ready, like Show Parameters.
+        self._homog_btn = ttk.Button(hdr, text="Homogeneity\u2026",
+                                     command=self._show_homogeneity, state="disabled")
+        self._homog_btn.pack(side=tk.RIGHT, padx=8)
         if self._rgcurve is not None:
             self._params_btn.state(["!disabled"])
+            self._homog_btn.state(["!disabled"])
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
             side=tk.LEFT, padx=8)
@@ -117,6 +122,15 @@ class UpgradedView:
         self._plot_state = embed_plot(self._win, result.fig, previous=self._plot_state)
         self._rig_btn.state(["!disabled"])
         self._params_btn.state(["!disabled"])
+        self._homog_btn.state(["!disabled"])
+
+    def _show_homogeneity(self):
+        # the analysis does not depend on the elution model; an optimized UV mapping, if this
+        # decomposition has one, is offered next to the estimated one
+        from molass_gui.homogeneity_dialog import show_homogeneity
+        from molass_gui.homogeneity_logic import optimized_mapping_of
+        show_homogeneity(self._win, self._status_var, self._decomp.ssd, self._rgcurve,
+                         optimized_mapping=optimized_mapping_of(self._decomp))
 
     def _show_parameters(self):
         show_parameters_lazy(self, self._win, self._status_var, self._decomp, self._trimmed)

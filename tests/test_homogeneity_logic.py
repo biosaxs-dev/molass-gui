@@ -59,3 +59,19 @@ def test_parse_and_format_cores():
     for bad in ("", "5", "20-10", "a-b"):
         with pytest.raises(ValueError):
             parse_cores(bad)
+
+
+def test_optimized_mapping_of_is_none_unless_the_uv_curves_use_another_mapping():
+    from types import SimpleNamespace
+    from molass_gui.homogeneity_logic import optimized_mapping_of
+    estimated = (1.4493, 3.464)
+
+    def decomp(uv_mapping, has_uv=True):
+        ssd = SimpleNamespace(uv=object() if has_uv else None, get_mapping=lambda: estimated)
+        return SimpleNamespace(ssd=ssd, get_uv_mapping=lambda: uv_mapping)
+
+    assert optimized_mapping_of(decomp(estimated)) is None                    # a quick decomposition
+    assert optimized_mapping_of(decomp((1.4493, 3.464 + 1e-12))) is None
+    assert optimized_mapping_of(decomp((1.45, 2.0))) == (1.45, 2.0)           # optimized UV curves
+    assert optimized_mapping_of(decomp(None)) is None
+    assert optimized_mapping_of(decomp((1.45, 2.0), has_uv=False)) is None    # XR-only data

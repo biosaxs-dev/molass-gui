@@ -126,7 +126,7 @@ UV spectra, the Guinier results, the Rg curve and a `summary.json` — enough to
 reproduce the figures or to continue in Excel, Origin, IGOR or pandas. In a
 notebook the same export is `decomp.export(folder, fmt="csv")`.
 
-**Homogeneity…** (in the Quick view, once the $R_g$ curve is ready) asks whether
+**Homogeneity…** (in the Quick and Upgraded views, once the $R_g$ curve is ready) asks whether
 a peak behaves like a single species. It plots ratios of concentration
 proxies — $I(0)$, $I(q)$ and the UV absorbance $A(\lambda)$ — across each peak
 core: the classical $I(0)/I(q_1)$ and $I(0)/A_{280}$ (black/gray) plus

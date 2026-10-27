@@ -54,8 +54,11 @@ def _with_i0(win, status_var, ssd, rgcurve, then):
     win.after(300, poll)
 
 
-def show_homogeneity(win, status_var, ssd, rgcurve):
-    """Open the Homogeneity dialog for the corrected ``ssd`` (needs the per-frame ``rgcurve`` for I(0))."""
+def show_homogeneity(win, status_var, ssd, rgcurve, optimized_mapping=None):
+    """Open the Homogeneity dialog for the corrected ``ssd`` (needs the per-frame ``rgcurve`` for I(0)).
+
+    ``optimized_mapping`` (see ``homogeneity_logic.optimized_mapping_of``) offers the mapping of
+    optimized UV curves next to the estimated one."""
     def open_dialog(rg):
         prev = status_var.get()
         status_var.set("Computing homogeneity\u2026")
@@ -64,7 +67,7 @@ def show_homogeneity(win, status_var, ssd, rgcurve):
             first = ssd.homogeneity(rgcurve=rg)
         finally:
             status_var.set(prev)
-        HomogeneityDialog(win, ssd, rg, first)
+        HomogeneityDialog(win, ssd, rg, first, optimized_mapping=optimized_mapping)
 
     _with_i0(win, status_var, ssd, rgcurve, open_dialog)
 

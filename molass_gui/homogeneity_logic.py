@@ -73,3 +73,19 @@ def parse_cores(text):
 
 def format_cores(cores):
     return ", ".join(f"{a}-{b}" for a, b in cores)
+
+
+def optimized_mapping_of(decomp):
+    """The UV->XR mapping the UV curves of *decomp* use when it differs from the estimated mapping of
+    its data (a rigorous result, or a decomposition whose UV curves were optimized), else ``None``."""
+    ssd = decomp.ssd
+    if ssd.uv is None:
+        return None
+    mapping = decomp.get_uv_mapping()
+    estimated = ssd.get_mapping()
+    if mapping is None or estimated is None:
+        return None
+    a, b = tuple(mapping), tuple(estimated)
+    if abs(a[0] - b[0]) <= 1e-9 * max(1.0, abs(b[0])) and abs(a[1] - b[1]) <= 1e-9 * max(1.0, abs(b[1])):
+        return None
+    return mapping
