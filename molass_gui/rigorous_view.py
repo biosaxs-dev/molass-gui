@@ -239,15 +239,19 @@ class RigorousView:
         self._win.after(10, self._prep_main_result if self._result_mode else self._prep_main)
 
     def _set_suptitle(self):
-        """Identify dataset, model and method, in the same style as plot_components()."""
+        """Identify dataset, model and method (and the ranks, if any is not 1), in the same
+        style as plot_components()."""
         from molass.PlotUtils.DecompositionPlot import make_title_text
         recipe = (self._est_kwargs.get('pipeline_recipe') or {})
         ssd = self._decomp.ssd if self._decomp is not None else None
-        title = make_title_text(
-            ssd,
-            recipe.get('model', 'egh'),
-            f"rigorous optimization ({self._method})",
-            dataset=None if getattr(ssd, 'datafiles', None) else self._session_tag)
+        args = (ssd, recipe.get('model', 'egh'), f"rigorous optimization ({self._method})")
+        dataset = None if getattr(ssd, 'datafiles', None) else self._session_tag
+        xr_ranks = recipe.get('xr_ranks') or getattr(self._decomp, 'xr_ranks', None)
+        try:
+            title = make_title_text(*args, dataset=dataset, xr_ranks=xr_ranks)
+        except TypeError:
+            # molass before the release whose make_title_text knows xr_ranks
+            title = make_title_text(*args, dataset=dataset)
         self._fig.suptitle(title, fontsize=18)
 
     # ------------------------------------------------------------------

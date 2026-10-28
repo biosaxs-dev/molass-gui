@@ -31,6 +31,15 @@ def show_denss_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_r
     DenssDialog(win, components, analysis_folder)
 
 
+def _denss_version():
+    """Version of the DENSS bundled with molass (e.g. 'v1.8.8'), or '' if unavailable."""
+    try:
+        from molass.SAXS.denss import __version__
+    except Exception:
+        return ""
+    return f"v{__version__}" if __version__ else ""
+
+
 def _component_areas(components):
     """Elution-curve area of each component (0 if it cannot be computed); the relative
     areas are the components' proportions, i.e. how significant each one is."""
@@ -70,7 +79,7 @@ class DenssDialog:
         self._error = None
 
         win = tk.Toplevel(parent)
-        win.title("Run DENSS")
+        win.title(f"Run DENSS {_denss_version()}".rstrip())
         self._win = win
 
         rgs, scores = [], []
