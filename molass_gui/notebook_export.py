@@ -95,10 +95,12 @@ def build_notebook(ctx):
             f"data_folder = sync_dropbox_folder(r\"{ctx.dropbox_path}\")\n"
             f"ssd = SSD(data_folder{uv_pickat_kwarg})\n"
         )
+    from molass_gui.trimming_info import trim_kwargs
+    trim_args = ", ".join(f"{k}={v!r}" for k, v in trim_kwargs(getattr(ctx, 'small_angle_limit', None)).items())
     cells.append(_code(
         _anomaly_handling_off_source() +
         load_source +
-        "trimmed = ssd.trimmed_copy()\n"
+        f"trimmed = ssd.trimmed_copy({trim_args})\n"
         "trimmed.plot_compact(baseline=True)"
     ))
 

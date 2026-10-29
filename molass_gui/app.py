@@ -6,6 +6,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from molass_gui import feature_flags, recent_folders
 from molass_gui.session_context import to_dropbox_path
+from molass_gui.trimming_info import SMALL_ANGLE_LIMITS, small_angle_limit_from_label, trim_kwargs
 
 
 class App:
@@ -59,14 +60,23 @@ class App:
                 row=3, column=1, columnspan=2, sticky=tk.W, padx=6)
             self._recent_var.trace_add('write', self._on_recent_change)
 
+        # Advanced: how many of the lowest-q points the trimming keeps (molass-library#342). The
+        # default keeps the points where an interparticle effect acts; the other choices are for
+        # comparison.
+        ttk.Label(f, text="Low-q trimming (advanced):").grid(row=4, column=0, sticky=tk.W, pady=4)
+        self._small_angle_var = tk.StringVar(value=SMALL_ANGLE_LIMITS[0][0])
+        ttk.Combobox(f, textvariable=self._small_angle_var,
+                     values=[label for label, _ in SMALL_ANGLE_LIMITS],
+                     state="readonly", width=24).grid(row=4, column=1, sticky=tk.W, padx=6)
+
         self._btn = ttk.Button(f, text="Load", command=self._run)
-        self._btn.grid(row=4, column=0, columnspan=3, pady=10)
+        self._btn.grid(row=5, column=0, columnspan=3, pady=10)
 
         self._status_var = tk.StringVar(value="Ready.")
         # wraplength caps the label so a long status message (e.g. a full
         # cache path) wraps instead of widening the fixed-size dialog.
         ttk.Label(f, textvariable=self._status_var, foreground="gray", wraplength=400).grid(
-            row=5, column=0, columnspan=3, sticky=tk.W)
+            row=6, column=0, columnspan=3, sticky=tk.W)
 
         # Indeterminate: the Dropbox bulk-zip download has no byte-level
         # progress to report, only a start/end status message.
@@ -188,6 +198,8 @@ class App:
                 if not self._connect_dropbox_dialog():
                     return  # user cancelled setup
 
+        small_angle_limit = small_angle_limit_from_label(self._small_angle_var.get())
+
         self._btn.state(["disabled"])
         self._status_var.set("Loading…")
 
@@ -203,7 +215,7 @@ class App:
                             _self._win.after(0, lambda: _self._status_var.set(msg))
 
                         self._win.after(0, lambda: self._progress.grid(
-                            row=6, column=0, columnspan=3, sticky=tk.W, pady=(4, 0)))
+                            row=7, column=0, columnspan=3, sticky=tk.W, pady=(4, 0)))
                         self._win.after(0, lambda: self._progress.start(10))
                         try:
                             actual_folder = sync_dropbox_folder(dropbox_path, on_status=on_status)
@@ -221,7 +233,7 @@ class App:
                 from molass.DataObjects import SecSaxsData as SSD
                 ssd_kwargs = {} if uv_pickat is None else {"uv_pickat": uv_pickat}
                 ssd = SSD(actual_folder, **ssd_kwargs)
-                trimmed = ssd.trimmed_copy()
+                trimmed = ssd.trimmed_copy(**trim_kwargs(small_angle_limit))
 
                 def on_main():
                     self._btn.state(["!disabled"])
@@ -234,6 +246,7 @@ class App:
                     from molass_gui.session_context import SessionContext
                     ctx = SessionContext(folder)
                     ctx.uv_pickat = uv_pickat
+                    ctx.small_angle_limit = small_angle_limit
                     from molass_gui.naive_view import NaiveView
                     NaiveView(ssd, trimmed, ctx, parent=self._win, app_root=self._app_root,
                               session_tag=session_tag).show()

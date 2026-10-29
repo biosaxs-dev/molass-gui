@@ -58,6 +58,7 @@ class SessionContext:
     def __init__(self, folder):
         self.folder = folder
         self.uv_pickat = None  # UV wavelength (nm) override from app.py's Load dialog; None = library default (280)
+        self.small_angle_limit = None  # trimmed_copy(small_angle_limit=...) from the Load dialog's advanced choice; None = library default
         self.num_components = None
         self.proportions = None  # actual proportions list used (custom or auto), or None for default decomposition
         self.proportions_source = None  # 'uv' if the "on UV" checkbox was checked, else None (library default 'xr')

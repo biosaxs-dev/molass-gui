@@ -3,6 +3,8 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
+from molass_gui.trimming_info import fmt_qrange, fmt_interparticle_hint
+
 # LumpingConstraint's own default (0.2) is calibrated for confident,
 # independently-detected peak positions. When the equal-split fallback fires,
 # a component's "position" is just the centroid of an arbitrary equal-area
@@ -79,6 +81,10 @@ class NaiveView:
         self._nc_spinbox.state(["disabled"])
         self._decomp_btn.state(["disabled"])
 
+        # the angular range the trimming kept (molass-library#342): read-only, so the default is visible
+        self._range_var = tk.StringVar(value=fmt_qrange(self._ssd, self._trimmed))
+        ttk.Label(win, textvariable=self._range_var, foreground="#555", padding=(8, 0)).pack(anchor=tk.W)
+
         # Show trimmed compact plot with baseline overlay
         result = self._trimmed.plot_compact(baseline=True)
         canvas = FigureCanvasTkAgg(result.fig, master=win)
@@ -121,7 +127,8 @@ class NaiveView:
             self._rgcurve_queue = rgcurve_queue
             self._auto_opts = auto_opts
             self._nc_var.set(auto_opts.get('num_components', 1))
-            self._status_var.set("")
+            # shown in the status label: the rank-2 (interparticle) case is rare
+            self._status_var.set(fmt_interparticle_hint(auto_opts))
             self._nc_spinbox.state(["!disabled"])
             self._decomp_btn.state(["!disabled"])
 
