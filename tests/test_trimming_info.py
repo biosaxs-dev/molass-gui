@@ -45,6 +45,21 @@ def test_interparticle_hint():
     assert fmt_interparticle_hint(None) == ""
 
 
+def test_fronting_text():
+    from types import SimpleNamespace
+    from molass_gui.trimming_info import fmt_fronting
+
+    def decomp(model, taus, flags=None):
+        curves = [SimpleNamespace(model=model, get_params=lambda t=t: [1.0, 100.0, 20.0, t]) for t in taus]
+        return SimpleNamespace(xr_ccurves=curves, num_components=len(taus), fronting_flags=flags)
+
+    assert fmt_fronting(decomp('egh', [-7.5])) == "Fronting allowed: all"           # detected from the EGH fit
+    assert fmt_fronting(decomp('egh', [0.0, 3.0])) == "Fronting allowed: none"
+    assert fmt_fronting(decomp('edm', [0.0, 0.0, 0.0], flags=[False, False, True])) == "Fronting allowed: component 3"
+    assert fmt_fronting(decomp('sdm', [0.0])) == ""                                   # cannot front
+    assert fmt_fronting(object()) == ""                                               # not a decomposition
+
+
 def test_export_carries_the_chosen_limit():
     molass_data = pytest.importorskip("molass_data")
     from molass_gui.notebook_export import build_notebook

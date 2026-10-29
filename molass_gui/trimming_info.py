@@ -41,6 +41,21 @@ def fmt_qrange(ssd, trimmed):
         return ""
 
 
+def fmt_fronting(decomposition):
+    """Which components may have a fronting peak in the rigorous stage (molass-library#350), one short text.
+
+    Empty with a molass that does not know the policy, and for models that cannot front (SDM, LKM, GRM).
+    """
+    try:
+        from molass.Rigorous.FrontingPolicy import describe, resolve_fronting
+        flags = resolve_fronting(decomposition, None)
+    except Exception:
+        return ""
+    if flags is None:
+        return ""
+    return "Fronting allowed: " + describe(flags)
+
+
 def fmt_interparticle_hint(recommended_options):
     """Hint for the rank-2 (interparticle) case from ``recommend_decomposition_options()``; empty when not suspected."""
     ranks = (recommended_options or {}).get("ranks")

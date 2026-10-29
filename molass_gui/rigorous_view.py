@@ -19,6 +19,7 @@ from molass_gui.homogeneity_dialog import show_homogeneity_lazy
 from molass_gui.denss_view import show_denss_lazy
 from molass_gui.ranks_dialog import show_set_ranks_lazy
 from molass_gui.window_tree import register_window_cleanup, register_close_guard
+from molass_gui.trimming_info import fmt_fronting
 
 _NUM_JOBS_DEFAULT = 10  # matches upgraded_view.py's New Analysis default
 
@@ -163,6 +164,9 @@ class RigorousView:
         ttk.Label(hdr, textvariable=self._quality_var, foreground="#555").pack(side=tk.LEFT, padx=8)
         self._quality_warn_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._quality_warn_var, foreground="#b45309").pack(side=tk.LEFT, padx=8)
+        # which components may front in this run (molass-library#350), set once the decomposition is ready
+        self._fronting_var = tk.StringVar(value="")
+        ttk.Label(hdr, textvariable=self._fronting_var, foreground="#555").pack(side=tk.LEFT, padx=8)
         # Terminate <-> Resume are two mutually-exclusive button rows, swapped
         # via pack()/pack_forget() (never .configure() -- some molass-legacy
         # import triggered during score()'s construction (python-tkdnd/
@@ -296,6 +300,7 @@ class RigorousView:
 
     def _on_prep_done(self, score):
         self._score = score
+        self._fronting_var.set(fmt_fronting(self._decomp_for_opt))
         self._pb.stop()
         self._prep_frame.pack_forget()
         try:
@@ -375,6 +380,7 @@ class RigorousView:
 
     def _on_prep_done_result(self, score, best_params, sv):
         self._score = score
+        self._fronting_var.set(fmt_fronting(self._decomp_for_opt))
         self._result_best_params = best_params
         self._pb.stop()
         self._prep_frame.pack_forget()
