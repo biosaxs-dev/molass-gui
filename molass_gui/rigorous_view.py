@@ -157,6 +157,12 @@ class RigorousView:
         ttk.Label(hdr, textvariable=self._iter_var).pack(side=tk.LEFT, padx=12)
         self._time_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._time_var, foreground="#555").pack(side=tk.LEFT, padx=4)
+        # rejected iterations / stalled search (molass-library#346): two labels, one grey and one
+        # orange, of which only one has text -- no .configure() (see the note below)
+        self._quality_var = tk.StringVar(value="")
+        ttk.Label(hdr, textvariable=self._quality_var, foreground="#555").pack(side=tk.LEFT, padx=8)
+        self._quality_warn_var = tk.StringVar(value="")
+        ttk.Label(hdr, textvariable=self._quality_warn_var, foreground="#b45309").pack(side=tk.LEFT, padx=8)
         # Terminate <-> Resume are two mutually-exclusive button rows, swapped
         # via pack()/pack_forget() (never .configure() -- some molass-legacy
         # import triggered during score()'s construction (python-tkdnd/
@@ -752,6 +758,10 @@ class RigorousView:
             self._iter_var.set(
                 f"Iter: {n_callbacks}/{expected}" if expected else f"Iter: {n_callbacks}")
             self._time_var.set(_fmt_time_info(elapsed_s, n_callbacks, expected))
+            quality, warn = _fmt_quality_info(
+                status.get('n_nonfinite'), status.get('n_entries'), status.get('stalled_jobs'))
+            self._quality_var.set("" if warn else quality)
+            self._quality_warn_var.set(quality if warn else "")
             if expected:
                 # Ceiling for the SV/Rg plots' x-axis: history that existed
                 # before this batch started, plus the FULL planned batch
@@ -866,6 +876,24 @@ def _expected_total_units(method, niter, n_params):
         return niter
     actual_popsize = 15 * n_params  # SolverDE default pop_size=15
     return max(1, (niter * FEVALS_PER_NITER) // actual_popsize)
+
+
+def _fmt_quality_info(n_nonfinite, n_entries, stalled_jobs):
+    """Text and warning flag for the rejected (non-finite) iterations and the stalled search (molass-library#346).
+
+    Empty text while nothing is wrong or the library is too old to report it. A search that wastes
+    a large share of its iterations, or whose last jobs did not improve the best objective value,
+    looks like a healthy one in the SV alone.
+    """
+    parts = []
+    warn = False
+    if n_nonfinite:
+        parts.append(f"Rejected: {n_nonfinite}/{n_entries}" if n_entries else f"Rejected: {n_nonfinite}")
+        warn = bool(n_entries) and n_nonfinite / n_entries > 0.2
+    if stalled_jobs and stalled_jobs >= 2:
+        parts.append(f"no improvement in the last {stalled_jobs} jobs")
+        warn = True
+    return "  ".join(parts), warn
 
 
 def _fmt_time_info(elapsed_s, n_done, n_total):
