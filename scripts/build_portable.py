@@ -33,7 +33,7 @@ from pathlib import Path
 
 # Pinned rather than auto-detected: reproducible builds, no scraping of
 # python.org needed. Bump manually when a newer Python is wanted.
-PYTHON_VERSION = "3.14.4"
+PYTHON_VERSION = "3.15.2"  # provisional (scratch branch): Tcl/Tk 9.0, caps ignored
 PYTHON_TAG = "python" + "".join(PYTHON_VERSION.split(".")[:2])  # "python314"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -49,7 +49,7 @@ CACHE_DIR = REPO_ROOT / "build" / "cache"
 # files that must be copied in from a regular, same-version Python install.
 # zlib1.dll is the easy-to-miss one: undocumented, but _tkinter.pyd fails to
 # load without it from Python 3.12 onward.
-TKINTER_DLLS = ["_tkinter.pyd", "tcl86t.dll", "tk86t.dll", "zlib1.dll"]
+TKINTER_DLLS = ["_tkinter.pyd", "tcl90.dll", "tcl9tk90.dll", "zlib1.dll"]
 TKINTER_FOLDERS = ["tcl", "Lib/tkinter"]
 
 
@@ -150,7 +150,8 @@ def resolve_install_target(source):
     if WHEEL_DIR.exists():
         shutil.rmtree(WHEEL_DIR)
     WHEEL_DIR.mkdir(parents=True)
-    run([sys.executable, "-m", "pip", "wheel", "--no-deps", "-w", str(WHEEL_DIR), source])
+    run([sys.executable, "-m", "pip", "wheel", "--no-deps", "--ignore-requires-python",
+         "-w", str(WHEEL_DIR), source])
     wheels = list(WHEEL_DIR.glob("*.whl"))
     assert len(wheels) == 1, f"expected exactly one wheel, got {wheels}"
     return str(wheels[0])
@@ -159,10 +160,12 @@ def resolve_install_target(source):
 def install_molass_gui(source):
     target = resolve_install_target(source)
     python_exe = EMBED_DIR / "python.exe"
+    # scikit-image 0.26 has no cp315 wheel; an explicit == pin admits the rc.
     run([
         str(python_exe), "-m", "pip", "install",
         "--no-warn-script-location", "--no-cache-dir",
-        "--only-binary=:all:",
+        "--only-binary=:all:", "--ignore-requires-python",
+        "scikit-image==0.27.0rc1",
         target,
     ])
 
@@ -248,8 +251,7 @@ def write_launcher():
     env_lines = (
         "@echo off\r\n"
         "set PYTHONNOUSERSITE=1\r\n"
-        "set TCL_LIBRARY=%~dp0python\\tcl\\tcl8.6\r\n"
-        "set TK_LIBRARY=%~dp0python\\tcl\\tk8.6\r\n"
+        "set TK_LIBRARY=%~dp0python\\tcl\\tk9.0\r\n"
     )
     launcher = BUILD_DIR / "molass-gui.bat"
     launcher.write_text(
