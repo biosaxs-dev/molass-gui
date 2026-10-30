@@ -245,16 +245,29 @@ def bundle_tkinter():
 
 
 def write_launcher():
-    launcher = BUILD_DIR / "molass-gui.bat"
-    launcher.write_text(
+    env_lines = (
         "@echo off\r\n"
         "set PYTHONNOUSERSITE=1\r\n"
         "set TCL_LIBRARY=%~dp0python\\tcl\\tcl8.6\r\n"
         "set TK_LIBRARY=%~dp0python\\tcl\\tk8.6\r\n"
+    )
+    launcher = BUILD_DIR / "molass-gui.bat"
+    launcher.write_text(
+        env_lines +
         'start "" "%~dp0python\\pythonw.exe" -m molass_gui.launcher %*\r\n',
         encoding="utf-8",
     )
     log(f"wrote {launcher.name}")
+
+    # Console variant: python.exe keeps stdout/stderr, so tracebacks and warnings stay visible.
+    debug_launcher = BUILD_DIR / "molass-gui-debug.bat"
+    debug_launcher.write_text(
+        env_lines +
+        '"%~dp0python\\python.exe" -m molass_gui.launcher %*\r\n'
+        "pause\r\n",
+        encoding="utf-8",
+    )
+    log(f"wrote {debug_launcher.name}")
 
 
 def read_version():

@@ -126,7 +126,32 @@ def _enable_crash_log():
 _crash_log_file = None  # kept open for the lifetime of the process (faulthandler writes to it on a crash)
 
 
+def _ensure_std_streams():
+    """Give sys.stdout/sys.stderr a destination when there is no console.
+
+    Under ``pythonw.exe`` (what the portable ``molass-gui.bat`` uses) both are ``None``, so any
+    ``tqdm`` progress bar or logging stream handler in molass raises
+    ``AttributeError: 'NoneType' object has no attribute 'write'`` (seen as "Rg error: ..." in
+    Quick View). The output goes to ``~/.molass/gui.log``; if that cannot be opened, it is discarded.
+    """
+    import sys
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    import os
+    try:
+        folder = os.path.join(os.path.expanduser("~"), ".molass")
+        os.makedirs(folder, exist_ok=True)
+        stream = open(os.path.join(folder, "gui.log"), "a", buffering=1, encoding="utf-8", errors="replace")
+    except Exception:
+        stream = open(os.devnull, "w")
+    if sys.stdout is None:
+        sys.stdout = stream
+    if sys.stderr is None:
+        sys.stderr = stream
+
+
 def main():
+    _ensure_std_streams()
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--dropbox-support", action="store_true",
