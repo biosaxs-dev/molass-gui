@@ -41,10 +41,12 @@ def fmt_qrange(ssd, trimmed):
         return ""
 
 
-def fmt_fronting(decomposition):
+def fmt_fronting(decomposition, show_b=False):
     """Which components may have a fronting peak in the rigorous stage (molass-library#350), one short text.
 
     Empty with a molass that does not know the policy, and for models that cannot front (SDM, LKM, GRM).
+    With ``show_b``, an EDM decomposition whose non-fronting components all have b = 0 (the quick-stage
+    default of molass-library#349) says so; read from the fitted parameters, not assumed.
     """
     try:
         from molass.Rigorous.FrontingPolicy import describe, resolve_fronting
@@ -53,7 +55,21 @@ def fmt_fronting(decomposition):
         return ""
     if flags is None:
         return ""
-    return "Fronting allowed: " + describe(flags)
+    text = "Fronting allowed: " + describe(flags)
+    if show_b and _non_fronting_b_is_zero(decomposition, flags):
+        text += "; b = 0 for the others" if any(flags) else "; b = 0"
+    return text
+
+
+def _non_fronting_b_is_zero(decomposition, flags):
+    try:
+        curves = decomposition.xr_ccurves
+        if curves[0].model != 'edm':
+            return False
+        b = [float(cc.get_params()[3]) for cc, may_front in zip(curves, flags) if not may_front]
+    except Exception:
+        return False
+    return bool(b) and all(abs(v) < 1e-9 for v in b)
 
 
 def fmt_interparticle_hint(recommended_options):

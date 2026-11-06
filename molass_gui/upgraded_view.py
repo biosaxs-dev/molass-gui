@@ -6,6 +6,7 @@ from molass_gui.model_names import model_display_name
 from molass_gui.plot_embed import embed_plot, export_component_data
 from molass_gui.rgcurve_worker import start_rgcurve_worker
 from molass_gui.params_dialog import show_parameters_lazy
+from molass_gui.trimming_info import fmt_fronting
 
 _METHOD_LABELS = ['BH', 'DE']
 # Temporary default while comparing single-job vs successive-jobs behavior
@@ -103,6 +104,9 @@ class UpgradedView:
             side=tk.LEFT, padx=8)
         self._rg_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._rg_var, foreground="gray").pack(
+            side=tk.LEFT, padx=8)
+        # which components may front (molass-library#350); for EDM it also decides b in the quick fit (#349)
+        ttk.Label(hdr, text=fmt_fronting(self._decomp, show_b=True), foreground="gray").pack(
             side=tk.LEFT, padx=8)
 
         # Show plot_components for the current model; overlay Rg curve immediately if
