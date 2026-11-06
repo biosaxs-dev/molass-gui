@@ -60,6 +60,23 @@ def test_fronting_text():
     assert fmt_fronting(object()) == ""                                               # not a decomposition
 
 
+def test_fronting_text_with_b():
+    from types import SimpleNamespace
+    from molass_gui.trimming_info import fmt_fronting
+
+    def edm(bs, flags):
+        curves = [SimpleNamespace(model='edm', get_params=lambda b=b: [1.0, 3.0, 1.0, b, 0.5, 0.01, 1.0])
+                  for b in bs]
+        return SimpleNamespace(xr_ccurves=curves, num_components=len(bs), fronting_flags=flags)
+
+    assert fmt_fronting(edm([0.0, 0.0], [False, False]), show_b=True) == "Fronting allowed: none; b = 0"
+    assert (fmt_fronting(edm([0.0, -0.5], [False, True]), show_b=True)
+            == "Fronting allowed: component 2; b = 0 for the others")
+    assert fmt_fronting(edm([0.0, 5.6], [False, False]), show_b=True) == "Fronting allowed: none"   # not pinned
+    assert fmt_fronting(edm([0.0, 0.0], [False, False])) == "Fronting allowed: none"                # opt-in text
+    assert fmt_fronting(edm([-0.5], [True]), show_b=True) == "Fronting allowed: all"
+
+
 def test_export_carries_the_chosen_limit():
     molass_data = pytest.importorskip("molass_data")
     from molass_gui.notebook_export import build_notebook
