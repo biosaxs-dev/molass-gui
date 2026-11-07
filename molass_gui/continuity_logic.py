@@ -2,7 +2,7 @@
 
 UNAVAILABLE_MESSAGE = ("The installed molass has no Decomposition.get_continuity_report() "
                        "(molass-library#370). Update molass to a release that includes it.")
-BUSY_MESSAGE = "Computing continuity report (the first one takes up to a minute)\u2026"
+BUSY_MESSAGE = "Computing continuity report\u2026"
 
 
 def is_available(decomp):

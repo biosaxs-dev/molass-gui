@@ -16,8 +16,9 @@ from molass_gui.plot_embed import embed_plot, close_dialog_figure
 def show_continuity(win, status_var, decomp, rgcurve=None, stage=None, heading=None):
     """Compute the continuity report of *decomp* in a background thread and open the dialog.
 
-    The first report of a session takes up to a minute (it builds the Kratky reference-shape
-    library, as the first Kratky Shape Match does), later ones 1-3 s; hence the thread.
+    The report takes a few seconds with the molass release after 1.2.3 (the Kratky shape library is not
+    needed); with molass 1.2.3 the first one of a session builds that library and takes up to a minute.
+    Either way it runs in a thread so that the window stays live.
 
     ``rgcurve`` is the data Rg curve the view already holds (``decomp.get_rg_curve()`` if None);
     ``stage`` (window title) and ``heading`` (the ``dataset | model | method`` line, e.g.
