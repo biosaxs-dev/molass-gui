@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "molass_gui"
-version = "0.5.2"
+version = "0.5.3"
 
 dependencies = [
-  "molass>=1.2.2",
+  "molass>=1.2.3",
   "molass_legacy>=1.7.2",
   "nbformat",
 ]
