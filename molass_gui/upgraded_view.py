@@ -96,9 +96,13 @@ class UpgradedView:
         self._homog_btn = ttk.Button(hdr, text="Homogeneity\u2026",
                                      command=self._show_homogeneity, state="disabled")
         self._homog_btn.pack(side=tk.RIGHT, padx=8)
+        self._continuity_btn = ttk.Button(hdr, text="Continuity\u2026",
+                                          command=self._show_continuity, state="disabled")
+        self._continuity_btn.pack(side=tk.RIGHT, padx=8)
         if self._rgcurve is not None:
             self._params_btn.state(["!disabled"])
             self._homog_btn.state(["!disabled"])
+            self._continuity_btn.state(["!disabled"])
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
             side=tk.LEFT, padx=8)
@@ -127,6 +131,15 @@ class UpgradedView:
         self._rig_btn.state(["!disabled"])
         self._params_btn.state(["!disabled"])
         self._homog_btn.state(["!disabled"])
+        self._continuity_btn.state(["!disabled"])
+
+    def _show_continuity(self):
+        # the verdict uses the data Rg curve only, so it does not depend on the elution model
+        from molass_gui.continuity_dialog import show_continuity
+        from molass_gui.homogeneity_dialog import _heading
+        show_continuity(self._win, self._status_var, self._decomp, rgcurve=self._rgcurve,
+                        stage=f"Upgraded \u2014 {model_display_name(self._model_info['model'])}",
+                        heading=_heading(self._decomp))
 
     def _show_homogeneity(self):
         # the analysis does not depend on the elution model; an optimized UV mapping, if this

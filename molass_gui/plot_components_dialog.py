@@ -10,6 +10,12 @@ from tkinter import ttk
 
 from molass_gui.plot_embed import export_component_data
 from molass_gui.kratky_shape_match_dialog import show_kratky_shape_match_for_result
+from molass_gui.continuity_dialog import show_continuity
+
+def _show_continuity(win, status_var, result, rgcurve):
+    """Continuity report of exactly the result shown here (*win* is the long-lived main view)."""
+    from molass_gui.homogeneity_dialog import _heading
+    show_continuity(win, status_var, result, rgcurve=rgcurve, stage="Rigorous", heading=_heading(result))
 
 
 def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
@@ -63,6 +69,8 @@ def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=
               command=lambda: export_component_data(result, dlg, rgcurve=rgcurve)).pack(side=tk.LEFT, padx=4)
     ttk.Button(btn_row, text="Kratky Shape Match\u2026",
               command=lambda: show_kratky_shape_match_for_result(win, result)).pack(side=tk.LEFT, padx=4)
+    ttk.Button(btn_row, text="Continuity\u2026",
+              command=lambda: _show_continuity(win, status_var, result, rgcurve)).pack(side=tk.LEFT, padx=4)
     _close = lambda: close_dialog_figure(dlg, plot_result.fig)
     ttk.Button(btn_row, text="Close", command=_close).pack(side=tk.LEFT, padx=4)
     dlg.protocol("WM_DELETE_WINDOW", _close)

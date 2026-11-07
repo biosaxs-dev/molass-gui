@@ -112,6 +112,9 @@ class QuickView:
         self._homog_btn = ttk.Button(hdr, text="Homogeneity\u2026",
                                      command=self._show_homogeneity, state="disabled")
         self._homog_btn.pack(side=tk.RIGHT, padx=8)
+        self._continuity_btn = ttk.Button(hdr, text="Continuity\u2026",
+                                          command=self._show_continuity, state="disabled")
+        self._continuity_btn.pack(side=tk.RIGHT, padx=8)
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
             side=tk.LEFT, padx=8)
@@ -218,6 +221,13 @@ class QuickView:
         self._action_btn.state(["!disabled"])
         self._params_btn.state(["!disabled"])
         self._homog_btn.state(["!disabled"])
+        self._continuity_btn.state(["!disabled"])
+
+    def _show_continuity(self):
+        from molass_gui.continuity_dialog import show_continuity
+        from molass_gui.homogeneity_dialog import _heading
+        show_continuity(self._win, self._status_var, self._decomp, rgcurve=self._rgcurve,
+                        stage="Quick", heading=_heading(self._decomp))
 
     def _show_homogeneity(self):
         from molass_gui.homogeneity_dialog import show_homogeneity, _heading
