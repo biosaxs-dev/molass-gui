@@ -80,16 +80,17 @@ class ContinuityDialog:
         self.report = report
         dlg = self._dlg = tk.Toplevel(win)
         dlg.title(window_title(stage))
-        dlg.geometry("1000x820")
+        dlg.geometry("1200x860")
 
-        text = tk.Text(dlg, wrap=tk.WORD, height=17, font=("Courier New", 9))
+        text = tk.Text(dlg, wrap=tk.WORD, height=15, font=("Courier New", 9))
         text.insert("1.0", report_text(report, heading))
         text.configure(state="disabled")
         text.pack(fill=tk.X, padx=8, pady=(8, 4))
 
         from matplotlib.figure import Figure
-        self._fig = Figure(figsize=(8, 4.5))
-        report.plot(fig=self._fig)
+        self._fig = Figure(figsize=(11.5, 4.8))
+        # the figure carries the same "dataset | model | method" title as Plot Components
+        report.plot(fig=self._fig, title=heading)
         figframe = ttk.Frame(dlg)
         figframe.pack(fill=tk.BOTH, expand=True)
         embed_plot(figframe, self._fig)
