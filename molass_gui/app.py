@@ -83,19 +83,18 @@ class App:
         self._progress = ttk.Progressbar(f, mode="indeterminate", length=300)
 
     def _discover_samples(self):
-        # molass_data is an optional convenience dependency (test/demo datasets),
-        # not a required one -- degrade to no sample selector if it's absent.
-        try:
-            import molass_data
-        except ImportError:
-            return []
-        return sorted(n for n in dir(molass_data) if n.startswith('SAMPLE'))
+        # molass_data and molass_benchmarks are optional convenience dependencies (test/demo
+        # datasets), not required ones -- degrade to no sample selector if both are absent.
+        from molass_gui.session_context import iter_samples
+        return sorted(name for _, name, _ in iter_samples())
 
     def _on_sample_change(self, *_):
         name = self._sample_var.get()
         if name and name != "(custom folder)":
-            import molass_data
-            self._folder_var.set(getattr(molass_data, name))
+            from molass_gui.session_context import sample_path
+            path = sample_path(name)
+            if path is not None:
+                self._folder_var.set(path)
 
     def _on_recent_change(self, *_):
         path = self._recent_var.get()

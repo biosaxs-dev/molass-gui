@@ -68,14 +68,16 @@ def build_notebook(ctx):
     # entirely rather than hardcoding the library's own default (280) here.
     uv_pickat_kwarg = "" if ctx.uv_pickat is None else f", uv_pickat={ctx.uv_pickat!r}"
 
-    if ctx.sample_name is not None:
-        # A bundled sample dataset: refer to it through the molass_data package, not
-        # the absolute path of this machine's site-packages, so the notebook runs
-        # anywhere molass_data is installed.
+    sample_ref = ctx.sample_ref
+    if sample_ref is not None:
+        # A bundled sample dataset: refer to it through its package (molass_data, molass_benchmarks),
+        # not the absolute path of this machine's site-packages, so the notebook runs anywhere
+        # that package is installed.
+        package, sample = sample_ref
         load_source = (
-            "import molass_data\n"
+            f"import {package}\n"
             "from molass.DataObjects import SecSaxsData as SSD\n\n"
-            f"ssd = SSD(molass_data.{ctx.sample_name}{uv_pickat_kwarg})\n"
+            f"ssd = SSD({package}.{sample}{uv_pickat_kwarg})\n"
         )
     elif ctx.dropbox_path is None:
         load_source = (

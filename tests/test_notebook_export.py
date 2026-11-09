@@ -37,6 +37,18 @@ def test_export_of_custom_folder_keeps_the_path(tmp_path):
     assert "molass_data" not in src
 
 
+def test_benchmark_samples_are_exported_through_molass_benchmarks():
+    molass_benchmarks = pytest.importorskip("molass_benchmarks")
+    from molass_gui.session_context import iter_samples, sample_path, to_sample_ref
+    assert to_sample_ref(molass_benchmarks.PROTEINS5) == ("molass_benchmarks", "PROTEINS5")
+    assert sample_path("PROTEINS5") == molass_benchmarks.PROTEINS5
+    assert "PROTEINS5" in [name for _, name, _ in iter_samples()]
+    src = _first_code_source(SessionContext(molass_benchmarks.PROTEINS5))
+    assert "import molass_benchmarks" in src
+    assert "SSD(molass_benchmarks.PROTEINS5)" in src
+    assert molass_benchmarks.PROTEINS5 not in src
+
+
 @pytest.fixture
 def anomaly_handling_off():
     from molass.Global.Options import get_molass_options, set_molass_options

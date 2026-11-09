@@ -7,25 +7,54 @@ wizard and full notebook flexibility.
 import os
 
 
-def to_sample_name(local_path):
-    """Return the molass_data attribute name (e.g. ``'SAMPLE6'``) whose dataset
-    lives at local_path, else None (also when molass_data isn't installed).
+SAMPLE_PACKAGES = (
+    ("molass_data", lambda name: name.startswith("SAMPLE")),
+    ("molass_benchmarks", lambda name: name.isupper()),
+)
 
-    The exported notebook then loads it as ``molass_data.SAMPLE6`` instead of
-    baking in this machine's absolute site-packages path, which would break on
-    any other machine or environment.
-    """
-    try:
-        import molass_data
-    except ImportError:
-        return None
-    target = os.path.normcase(os.path.realpath(local_path))
-    for name in dir(molass_data):
-        if not name.startswith("SAMPLE"):
+
+def iter_samples():
+    """Yield ``(package, name, path)`` of the bundled sample datasets: ``SAMPLE*`` of ``molass_data`` and the
+    upper-case attributes of ``molass_benchmarks`` (e.g. ``PROTEINS5``). Packages that are not installed are
+    skipped (both are optional convenience dependencies)."""
+    import importlib
+    for package, selects in SAMPLE_PACKAGES:
+        try:
+            module = importlib.import_module(package)
+        except ImportError:
             continue
-        path = getattr(molass_data, name)
-        if isinstance(path, str) and os.path.normcase(os.path.realpath(path)) == target:
-            return name
+        for name in dir(module):
+            path = getattr(module, name)
+            if selects(name) and isinstance(path, str):
+                yield package, name, path
+
+
+def to_sample_ref(local_path):
+    """Return ``(package, name)`` (e.g. ``('molass_data', 'SAMPLE1')``) of the bundled dataset that lives at
+    local_path, else None (also when the packages aren't installed).
+
+    The exported notebook then loads it as ``molass_data.SAMPLE1`` instead of baking in this machine's absolute
+    site-packages path, which would break on any other machine or environment.
+    """
+    target = os.path.normcase(os.path.realpath(local_path))
+    for package, name, path in iter_samples():
+        if os.path.normcase(os.path.realpath(path)) == target:
+            return package, name
+    return None
+
+
+def to_sample_name(local_path):
+    """Return the attribute name (e.g. ``'SAMPLE1'``, ``'PROTEINS5'``) of the bundled dataset that lives at
+    local_path, else None. See :func:`to_sample_ref` for the package too."""
+    ref = to_sample_ref(local_path)
+    return None if ref is None else ref[1]
+
+
+def sample_path(name):
+    """Path of the bundled dataset with this attribute name, or None."""
+    for package, sample, path in iter_samples():
+        if sample == name:
+            return path
     return None
 
 
@@ -71,10 +100,16 @@ class SessionContext:
         self.xr_ranks = None  # set via QuickView's Ranks entry (Decomposition.update_xr_ranks)
 
     @property
+    def sample_ref(self):
+        """``(package, name)`` (e.g. ``('molass_data', 'SAMPLE1')``) if self.folder is a bundled sample
+        dataset, else None. Takes precedence over dropbox_path in exports."""
+        return to_sample_ref(self.folder)
+
+    @property
     def sample_name(self):
-        """molass_data attribute name (e.g. 'SAMPLE6') if self.folder is a bundled
-        sample dataset, else None. Takes precedence over dropbox_path in exports."""
-        return to_sample_name(self.folder)
+        """Attribute name (e.g. 'SAMPLE1', 'PROTEINS5') if self.folder is a bundled sample dataset, else None."""
+        ref = self.sample_ref
+        return None if ref is None else ref[1]
 
     @property
     def dropbox_path(self):
