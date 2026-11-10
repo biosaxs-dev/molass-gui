@@ -4,6 +4,8 @@ import tkinter as tk
 from tkinter import ttk
 
 import numpy as np
+from matplotlib.legend import Legend
+from matplotlib.lines import Line2D
 
 from molass_gui.peak_selection import (parse_positions, format_positions, classify_peaks, default_selection,
                                        toggle_peak)
@@ -206,7 +208,7 @@ class NaiveView:
         self._peaks_entry.state(["!disabled"])
         self._peak_btn.configure(text="Use selected peaks")
         self._peak_btn.state(["disabled"])   # a label: Decompose uses the selection
-        self._peak_hint_var.set("\u25cf confirmed by UV   \u25cb detected only   click the curve to add/remove a peak")
+        self._peak_hint_var.set("click the curve to add/remove a peak")
         self._peaks_var.set(format_positions(self._confirmed_default))
         self._redraw_peak_markers()
 
@@ -263,6 +265,13 @@ class NaiveView:
                 fontsize=8, annotation_clip=False))
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
+        legend = Legend(ax, [
+            Line2D([], [], marker="v", markersize=8, linestyle="none", color="tab:red"),
+            Line2D([], [], marker="v", markersize=8, linestyle="none", color="tab:red", markerfacecolor="none"),
+            Line2D([], [], color="tab:green", linestyle="--", linewidth=1.2)],
+            ["seen in XR and UV", "seen in XR only", "selected"], loc="upper right", fontsize=8)
+        # added as an artist, so the plot's own legend is left alone
+        self._marker_artists.append(ax.add_artist(legend))
 
     def _sync_nc_from_proportions(self, *_args):
         # Custom proportions supersedes Components -- reflect its length live,
