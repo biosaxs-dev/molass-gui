@@ -203,12 +203,17 @@ class NaiveView:
         self._peaks_var.set(format_positions(self._confirmed_default))
 
     def _on_curve_click(self, event):
-        if event.inaxes is not self._xr_ax or event.xdata is None or self._toolbar.mode != "":
-            return  # not on the XR panel, or zoom/pan is active
+        # The XR panel has a twin (UV) y-axis on top of it, so event.inaxes is that twin, never self._xr_ax:
+        # test the panel's area instead and convert the pixel to a frame on the XR axis.
+        if event.x is None or event.y is None or not self._xr_ax.bbox.contains(event.x, event.y):
+            return
+        if self._toolbar.mode != "":
+            return  # zoom/pan is active
+        frame = self._xr_ax.transData.inverted().transform((event.x, event.y))[0]
         positions = self._current_positions()
         if positions is None:
             return
-        new = toggle_peak(positions, event.xdata, self._xr_x, self._xr_y)
+        new = toggle_peak(positions, frame, self._xr_x, self._xr_y, candidates=[f for f, _ in self._candidates])
         if new != positions:
             self._peaks_var.set(format_positions(new))
 

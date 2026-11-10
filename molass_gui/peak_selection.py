@@ -53,15 +53,20 @@ def default_selection(detected, confirmed, tol=CONFIRM_TOL_FRAMES):
     return sure if sure else [d for d, _ in classified]
 
 
-def toggle_peak(selected, clicked, x, y, snap=SNAP_FRAMES):
+def toggle_peak(selected, clicked, x, y, snap=SNAP_FRAMES, candidates=()):
     """The chosen peaks after a click at frame ``clicked`` on the curve ``(x, y)``: a click within ``snap`` frames
-    of a chosen peak removes the nearest one; otherwise the local maximum of the curve within ``snap`` frames of
-    the click is added. A click on a flat region without any curve point nearby changes nothing."""
+    of a chosen peak removes the nearest one; otherwise a detected peak (``candidates``) within ``snap`` frames is
+    added as it is, else the local maximum of the curve within ``snap`` frames of the click. A click on a flat
+    region without any curve point nearby changes nothing."""
     selected = sorted(int(s) for s in selected)
     near = [s for s in selected if abs(s - clicked) <= snap]
     if near:
         selected.remove(min(near, key=lambda s: abs(s - clicked)))
         return selected
+    marks = [int(c) for c in candidates if abs(c - clicked) <= snap]
+    if marks:
+        peak = min(marks, key=lambda c: abs(c - clicked))
+        return sorted(selected + [peak])
     x = np.asarray(x)
     y = np.asarray(y)
     window = np.where(np.abs(x - clicked) <= snap)[0]

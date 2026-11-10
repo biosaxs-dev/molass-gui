@@ -40,3 +40,4 @@ def test_toggle_peak_adds_the_local_maximum_and_removes_a_chosen_peak():
     assert both == [100, 150]
     assert toggle_peak(both, 103, x, y) == [150]            # within 8 frames of a chosen peak: removed
     assert toggle_peak(both, 1000, x, y) == both            # no curve point near the click: nothing changes
+    assert toggle_peak([], 96, x, y, candidates=[98]) == [98]   # a detected peak nearby wins over the local maximum
