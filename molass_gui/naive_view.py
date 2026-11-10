@@ -86,20 +86,22 @@ class NaiveView:
         self._decomp_btn.state(["disabled"])
 
         # Peak positions (molass-gui#14): the user's own choice of the XR peak frames, an alternative to
-        # Proportions. Empty = the default decomposition, unchanged.
+        # Proportions. Two modes: off (the initial one, no peak marks, as before this feature; the field is empty
+        # so the default decomposition is unchanged) and on (marks shown, clicking the curve selects peaks).
+        self._peak_mode = False
         hdr2 = ttk.Frame(win, padding=(8, 0))
         hdr2.pack(fill=tk.X)
         ttk.Label(hdr2, text="Peak positions (optional):").pack(side=tk.LEFT)
         self._peaks_var = tk.StringVar(value="")
         self._peaks_var.trace_add("write", self._on_peaks_changed)
-        ttk.Entry(hdr2, textvariable=self._peaks_var, width=28).pack(side=tk.LEFT, padx=6)
-        self._use_confirmed_btn = ttk.Button(hdr2, text="Use confirmed peaks",
-                                             command=self._use_confirmed_peaks)
-        self._use_confirmed_btn.pack(side=tk.LEFT, padx=6)
-        self._use_confirmed_btn.state(["disabled"])
-        ttk.Button(hdr2, text="Clear", command=lambda: self._peaks_var.set("")).pack(side=tk.LEFT)
-        ttk.Label(hdr2, text="\u25cf confirmed by UV   \u25cb detected only   click the curve to add/remove a peak",
-                  foreground="#555").pack(side=tk.LEFT, padx=12)
+        self._peaks_entry = ttk.Entry(hdr2, textvariable=self._peaks_var, width=28, state="disabled")
+        self._peaks_entry.pack(side=tk.LEFT, padx=6)
+        self._peak_btn = ttk.Button(hdr2, text="Show confirmed peaks", command=self._start_peak_selection)
+        self._peak_btn.pack(side=tk.LEFT, padx=6)
+        self._peak_btn.state(["disabled"])   # until the detection has finished
+        ttk.Button(hdr2, text="Clear", command=self._clear_peak_selection).pack(side=tk.LEFT)
+        self._peak_hint_var = tk.StringVar(value="")
+        ttk.Label(hdr2, textvariable=self._peak_hint_var, foreground="#555").pack(side=tk.LEFT, padx=12)
 
         # the angular range the trimming kept (molass-library#342): read-only, so the default is visible
         self._range_var = tk.StringVar(value=fmt_qrange(self._ssd, self._trimmed))
@@ -167,8 +169,7 @@ class NaiveView:
             self._candidates = classify_peaks(detected, confirmed)
             self._confirmed_default = default_selection(detected, confirmed)
             if self._confirmed_default:
-                self._use_confirmed_btn.state(["!disabled"])
-            self._redraw_peak_markers()
+                self._peak_btn.state(["!disabled"])
             # shown in the status label: the rank-2 (interparticle) case is rare
             self._status_var.set(fmt_interparticle_hint(auto_opts))
             self._nc_spinbox.state(["!disabled"])
@@ -199,10 +200,30 @@ class NaiveView:
             self._nc_var.set(len(positions))
         self._redraw_peak_markers()
 
-    def _use_confirmed_peaks(self):
+    def _start_peak_selection(self):
+        """Off -> on: show the peak marks and pre-select the confirmed peaks, to be adjusted by clicking."""
+        self._peak_mode = True
+        self._peaks_entry.state(["!disabled"])
+        self._peak_btn.configure(text="Use selected peaks")
+        self._peak_btn.state(["disabled"])   # a label: Decompose uses the selection
+        self._peak_hint_var.set("\u25cf confirmed by UV   \u25cb detected only   click the curve to add/remove a peak")
         self._peaks_var.set(format_positions(self._confirmed_default))
+        self._redraw_peak_markers()
+
+    def _clear_peak_selection(self):
+        """On -> off: clear the field and go back to the initial state, with no peak marks."""
+        self._peak_mode = False
+        self._peaks_var.set("")
+        self._peaks_entry.state(["disabled"])
+        self._peak_btn.configure(text="Show confirmed peaks")
+        if self._confirmed_default:
+            self._peak_btn.state(["!disabled"])
+        self._peak_hint_var.set("")
+        self._redraw_peak_markers()
 
     def _on_curve_click(self, event):
+        if not self._peak_mode:
+            return
         # The XR panel has a twin (UV) y-axis on top of it, so event.inaxes is that twin, never self._xr_ax:
         # test the panel's area instead and convert the pixel to a frame on the XR axis.
         if event.x is None or event.y is None or not self._xr_ax.bbox.contains(event.x, event.y):
@@ -221,6 +242,11 @@ class NaiveView:
         for artist in self._marker_artists:
             artist.remove()
         self._marker_artists = []
+        if self._peak_mode:
+            self._draw_peak_markers()
+        self._canvas.draw_idle()
+
+    def _draw_peak_markers(self):
         ax = self._xr_ax
         xlim, ylim = ax.get_xlim(), ax.get_ylim()
         ymax = float(np.nanmax(self._xr_y)) if len(self._xr_y) else 1.0
@@ -237,7 +263,6 @@ class NaiveView:
                 fontsize=8, annotation_clip=False))
         ax.set_xlim(xlim)
         ax.set_ylim(ylim)
-        self._canvas.draw_idle()
 
     def _sync_nc_from_proportions(self, *_args):
         # Custom proportions supersedes Components -- reflect its length live,
