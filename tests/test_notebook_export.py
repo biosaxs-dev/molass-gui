@@ -49,6 +49,20 @@ def test_benchmark_samples_are_exported_through_molass_benchmarks():
     assert molass_benchmarks.PROTEINS5 not in src
 
 
+def test_export_of_chosen_peak_positions():
+    ctx = SessionContext(molass_data.SAMPLE1)
+    ctx.num_components = 3
+    ctx.xr_peakpositions = [561, 648, 760]
+    decomp_cell = next(c.source for c in build_notebook(ctx).cells
+                       if c.cell_type == "code" and "quick_decomposition" in c.source)
+    assert "quick_decomposition(xr_peakpositions=[561, 648, 760]" in decomp_cell
+    assert "num_components" not in decomp_cell
+    ctx.xr_peakpositions = None
+    decomp_cell = next(c.source for c in build_notebook(ctx).cells
+                       if c.cell_type == "code" and "quick_decomposition" in c.source)
+    assert "quick_decomposition(num_components=3" in decomp_cell
+
+
 @pytest.fixture
 def anomaly_handling_off():
     from molass.Global.Options import get_molass_options, set_molass_options

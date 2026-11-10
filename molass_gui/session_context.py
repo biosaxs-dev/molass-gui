@@ -90,6 +90,7 @@ class SessionContext:
         self.small_angle_limit = None  # trimmed_copy(small_angle_limit=...) from the Load dialog's advanced choice; None = library default
         self.num_components = None
         self.proportions = None  # actual proportions list used (custom or auto), or None for default decomposition
+        self.xr_peakpositions = None  # frames of the peaks the user chose (molass-gui#14), or None = library default
         self.proportions_source = None  # 'uv' if the "on UV" checkbox was checked, else None (library default 'xr')
         self.trust_proportions = True  # False only for the GUI's own low-confidence equal-split fallback
         self.constraint_weight = None  # LumpingConstraint weight override; None = library default (see molass-gui#3)

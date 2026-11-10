@@ -190,6 +190,8 @@ class UpgradedView:
             # re-derives the same, correctly-initialized decomposition instead of silently
             # falling back to the unstable default for high-overlap datasets.
             decomp_params['proportions'] = self._ctx.proportions
+        elif getattr(self._ctx, 'xr_peakpositions', None):
+            decomp_params['xr_peakpositions'] = [int(p) for p in self._ctx.xr_peakpositions]
         # build_pipeline_recipe() is the single shared builder for the core
         # (decomposition/SSD-derived) recipe fields -- including uv_pickat/
         # xr_pickat, captured from self._trimmed (this session's SSD) via its

@@ -110,8 +110,13 @@ def build_notebook(ctx):
         proportions = getattr(ctx, 'proportions', None)
         # num_components is redundant (and a footgun if hand-edited out of
         # sync) once proportions is given -- len(proportions) already implies it.
-        components_kwarg = (f"proportions={proportions}" if proportions
-                            else f"num_components={ctx.num_components}")
+        peakpositions = getattr(ctx, 'xr_peakpositions', None)
+        if proportions:
+            components_kwarg = f"proportions={proportions}"
+        elif peakpositions:
+            components_kwarg = f"xr_peakpositions={[int(p) for p in peakpositions]}"
+        else:
+            components_kwarg = f"num_components={ctx.num_components}"
         source_kwarg = (f", proportions_source={ctx.proportions_source!r}"
                         if getattr(ctx, 'proportions_source', None) else "")
         ranks_line = (f"decomp.update_xr_ranks({ctx.xr_ranks})\n"

@@ -3,6 +3,10 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
+import numpy as np
+
+from molass_gui.peak_selection import (parse_positions, format_positions, classify_peaks, default_selection,
+                                       toggle_peak)
 from molass_gui.trimming_info import fmt_qrange, fmt_interparticle_hint
 
 # LumpingConstraint's own default (0.2) is calibrated for confident,
@@ -81,6 +85,22 @@ class NaiveView:
         self._nc_spinbox.state(["disabled"])
         self._decomp_btn.state(["disabled"])
 
+        # Peak positions (molass-gui#14): the user's own choice of the XR peak frames, an alternative to
+        # Proportions. Empty = the default decomposition, unchanged.
+        hdr2 = ttk.Frame(win, padding=(8, 0))
+        hdr2.pack(fill=tk.X)
+        ttk.Label(hdr2, text="Peak positions (optional):").pack(side=tk.LEFT)
+        self._peaks_var = tk.StringVar(value="")
+        self._peaks_var.trace_add("write", self._on_peaks_changed)
+        ttk.Entry(hdr2, textvariable=self._peaks_var, width=28).pack(side=tk.LEFT, padx=6)
+        self._use_confirmed_btn = ttk.Button(hdr2, text="Use confirmed peaks",
+                                             command=self._use_confirmed_peaks)
+        self._use_confirmed_btn.pack(side=tk.LEFT, padx=6)
+        self._use_confirmed_btn.state(["disabled"])
+        ttk.Button(hdr2, text="Clear", command=lambda: self._peaks_var.set("")).pack(side=tk.LEFT)
+        ttk.Label(hdr2, text="\u25cf confirmed by UV   \u25cb detected only   click the curve to add/remove a peak",
+                  foreground="#555").pack(side=tk.LEFT, padx=12)
+
         # the angular range the trimming kept (molass-library#342): read-only, so the default is visible
         self._range_var = tk.StringVar(value=fmt_qrange(self._ssd, self._trimmed))
         ttk.Label(win, textvariable=self._range_var, foreground="#555", padding=(8, 0)).pack(anchor=tk.W)
@@ -90,8 +110,17 @@ class NaiveView:
         canvas = FigureCanvasTkAgg(result.fig, master=win)
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        NavigationToolbar2Tk(canvas, win).update()
+        self._toolbar = NavigationToolbar2Tk(canvas, win)
+        self._toolbar.update()
         self._win = win
+        self._canvas = canvas
+        self._xr_ax = result.axes[0]
+        x, y = result.xr_curve.get_xy()
+        self._xr_x, self._xr_y = np.asarray(x), np.asarray(y)
+        self._marker_artists = []
+        self._candidates = []      # [(frame, confirmed)] from the detection
+        self._confirmed_default = []
+        canvas.mpl_connect("button_press_event", self._on_curve_click)
 
         threading.Thread(target=self._detect_worker, daemon=True).start()
 
@@ -122,11 +151,24 @@ class NaiveView:
             self._win.after(0, on_error)
             return
 
+        # The peaks the XR/UV mapping confirms, to tell them from the merely detected ones in the plot.
+        # Optional: without it (e.g. no UV data) every detected peak is shown as unconfirmed.
+        try:
+            confirmed = [int(p) for p in corrected.estimate_mapping().xr_peaks]
+        except Exception:
+            confirmed = None
+        detected = [int(p) for p in auto_opts.get('xr_peakpositions', [])]   # an ndarray: no `or []`
+
         def on_main():
             self._corrected = corrected
             self._rgcurve_queue = rgcurve_queue
             self._auto_opts = auto_opts
             self._nc_var.set(auto_opts.get('num_components', 1))
+            self._candidates = classify_peaks(detected, confirmed)
+            self._confirmed_default = default_selection(detected, confirmed)
+            if self._confirmed_default:
+                self._use_confirmed_btn.state(["!disabled"])
+            self._redraw_peak_markers()
             # shown in the status label: the rank-2 (interparticle) case is rare
             self._status_var.set(fmt_interparticle_hint(auto_opts))
             self._nc_spinbox.state(["!disabled"])
@@ -137,6 +179,60 @@ class NaiveView:
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
         export_and_open(self._ctx, self._win)
+
+    # --- Peak positions (molass-gui#14) ---
+
+    def _frame_range(self):
+        return (self._xr_x[0], self._xr_x[-1])
+
+    def _current_positions(self):
+        """The chosen peak frames, [] when the field is empty, None while the text does not parse."""
+        try:
+            return parse_positions(self._peaks_var.get(), self._frame_range())
+        except ValueError:
+            return None
+
+    def _on_peaks_changed(self, *_args):
+        # Like Proportions, a chosen set of peaks fixes the number of components: reflect it live.
+        positions = self._current_positions()
+        if positions:
+            self._nc_var.set(len(positions))
+        self._redraw_peak_markers()
+
+    def _use_confirmed_peaks(self):
+        self._peaks_var.set(format_positions(self._confirmed_default))
+
+    def _on_curve_click(self, event):
+        if event.inaxes is not self._xr_ax or event.xdata is None or self._toolbar.mode != "":
+            return  # not on the XR panel, or zoom/pan is active
+        positions = self._current_positions()
+        if positions is None:
+            return
+        new = toggle_peak(positions, event.xdata, self._xr_x, self._xr_y)
+        if new != positions:
+            self._peaks_var.set(format_positions(new))
+
+    def _redraw_peak_markers(self):
+        for artist in self._marker_artists:
+            artist.remove()
+        self._marker_artists = []
+        ax = self._xr_ax
+        xlim, ylim = ax.get_xlim(), ax.get_ylim()
+        ymax = float(np.nanmax(self._xr_y)) if len(self._xr_y) else 1.0
+        for frame, confirmed in self._candidates:
+            i = int(np.argmin(np.abs(self._xr_x - frame)))
+            y = float(self._xr_y[i])
+            self._marker_artists.append(ax.plot(
+                [frame], [y + 0.03*ymax], marker="v", markersize=8, linestyle="none", color="tab:red",
+                markerfacecolor="tab:red" if confirmed else "none", zorder=5)[0])
+        for frame in self._current_positions() or []:
+            self._marker_artists.append(ax.axvline(frame, color="tab:green", linestyle="--", linewidth=1.2, zorder=4))
+            self._marker_artists.append(ax.annotate(
+                str(frame), (frame, ylim[1]), xytext=(2, -12), textcoords="offset points", color="tab:green",
+                fontsize=8, annotation_clip=False))
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        self._canvas.draw_idle()
 
     def _sync_nc_from_proportions(self, *_args):
         # Custom proportions supersedes Components -- reflect its length live,
@@ -170,10 +266,28 @@ class NaiveView:
                 self._status_var.set("Error: proportions must be comma-separated numbers")
                 return
 
+        # Peak positions is an alternative to Proportions, not a complement: both fix where the
+        # components sit, so giving both is ambiguous.
+        peak_positions = self._current_positions()
+        if peak_positions is None:
+            try:
+                parse_positions(self._peaks_var.get(), self._frame_range())
+            except ValueError as exc:
+                self._status_var.set(f"Error: {exc}")
+            return
+        if peak_positions and custom_proportions is not None:
+            self._status_var.set("Error: give either Peak positions or Proportions, not both")
+            return
+
         # Proportions is authoritative when given -- Components is kept in sync
         # live by _sync_nc_from_proportions, but re-derive here too so a
         # mismatch can never actually occur regardless of widget-event timing.
-        nc = len(custom_proportions) if custom_proportions is not None else self._nc_var.get()
+        if custom_proportions is not None:
+            nc = len(custom_proportions)
+        elif peak_positions:
+            nc = len(peak_positions)
+        else:
+            nc = self._nc_var.get()
         self._nc_var.set(nc)
 
         self._decomp_btn.state(["disabled"])
@@ -193,6 +307,9 @@ class NaiveView:
                 if custom_proportions is not None:
                     proportions = custom_proportions
                     trust_proportions = True
+                elif peak_positions:
+                    proportions = None
+                    trust_proportions = True   # the user's own positions, not a patch: default constraint weight
                 else:
                     # Highly-overlapping peaks (e.g. SAMPLE4) make the default
                     # greedy peak-recognition unstable; recommend_decomposition_options()
@@ -219,15 +336,19 @@ class NaiveView:
                 if proportions is not None:
                     extra = {'proportions_source': proportions_source} if proportions_source else {}
                     decomp = corrected.quick_decomposition(num_components=nc, proportions=proportions, **extra)
+                elif peak_positions:
+                    decomp = corrected.quick_decomposition(num_components=nc, xr_peakpositions=peak_positions)
                 else:
                     decomp = corrected.quick_decomposition(num_components=nc)
 
                 def on_main():
                     self._decomp_btn.state(["!disabled"])
-                    self._status_var.set("Used proportional decomposition"
-                                          if proportions is not None else "")
+                    self._status_var.set("Used proportional decomposition" if proportions is not None
+                                          else f"Used peak positions {format_positions(peak_positions)}"
+                                          if peak_positions else "")
                     self._ctx.num_components = nc
                     self._ctx.proportions = proportions
+                    self._ctx.xr_peakpositions = peak_positions or None
                     self._ctx.proportions_source = proportions_source
                     self._ctx.trust_proportions = trust_proportions
                     self._ctx.constraint_weight = None if trust_proportions else FALLBACK_LUMPING_WEIGHT
