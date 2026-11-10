@@ -88,15 +88,17 @@ class NaiveView:
         self._decomp_btn.state(["disabled"])
 
         # Peak positions (molass-gui#14): the user's own choice of the XR peak frames, an alternative to
-        # Proportions. Two modes: off (the initial one, no peak marks, as before this feature; the field is empty
-        # so the default decomposition is unchanged) and on (marks shown, clicking the curve selects peaks).
+        # Proportions. The field works like Proportions in any mode: frames typed in it (confirmed or not) are
+        # used by Decompose, and an empty field means the default decomposition. The two modes only concern the
+        # display: off (the initial one, no peak marks, as before this feature) and on (marks shown, clicking
+        # the curve adds/removes a peak, "Redraw positions" redraws the lines of the field's frames).
         self._peak_mode = False
         hdr2 = ttk.Frame(win, padding=(8, 0))
         hdr2.pack(fill=tk.X)
         ttk.Label(hdr2, text="Peak positions (optional):").pack(side=tk.LEFT)
         self._peaks_var = tk.StringVar(value="")
         self._peaks_var.trace_add("write", self._on_peaks_changed)
-        self._peaks_entry = ttk.Entry(hdr2, textvariable=self._peaks_var, width=28, state="disabled")
+        self._peaks_entry = ttk.Entry(hdr2, textvariable=self._peaks_var, width=28)
         self._peaks_entry.pack(side=tk.LEFT, padx=6)
         self._peak_btn = ttk.Button(hdr2, text="Show confirmed peaks", command=self._start_peak_selection)
         self._peak_btn.pack(side=tk.LEFT, padx=6)
@@ -196,31 +198,44 @@ class NaiveView:
             return None
 
     def _on_peaks_changed(self, *_args):
-        # Like Proportions, a chosen set of peaks fixes the number of components: reflect it live.
+        # Like Proportions, a chosen set of peaks fixes the number of components: reflect it live. The plot is
+        # not redrawn here (that would flicker while typing): see _redraw_positions.
         positions = self._current_positions()
         if positions:
             self._nc_var.set(len(positions))
-        self._redraw_peak_markers()
 
     def _start_peak_selection(self):
-        """Off -> on: show the peak marks and pre-select the confirmed peaks, to be adjusted by clicking."""
+        """Off -> on: show the peak marks; the confirmed peaks are pre-selected unless the field already has frames."""
         self._peak_mode = True
-        self._peaks_entry.state(["!disabled"])
-        self._peak_btn.configure(text="Use selected peaks")
-        self._peak_btn.state(["disabled"])   # a label: Decompose uses the selection
-        self._peak_hint_var.set("click the curve to add/remove a peak")
-        self._peaks_var.set(format_positions(self._confirmed_default))
+        self._peak_btn.configure(text="Redraw positions", command=self._redraw_positions)
+        self._peak_hint_var.set("click the curve to add/remove a peak, or type frames and Redraw")
+        if not self._peaks_var.get().strip():
+            self._peaks_var.set(format_positions(self._confirmed_default))
+        self._redraw_positions()
+
+    def _redraw_positions(self):
+        """Draw the lines of the frames in the field, the selected peaks and the typed ones alike."""
+        try:
+            parse_positions(self._peaks_var.get(), self._frame_range())
+        except ValueError as exc:
+            self._status_var.set(f"Error: {exc}")
+        else:
+            self._clear_error()
         self._redraw_peak_markers()
 
+    def _clear_error(self):
+        if self._status_var.get().startswith("Error:"):
+            self._status_var.set("")
+
     def _clear_peak_selection(self):
-        """On -> off: clear the field and go back to the initial state, with no peak marks."""
+        """Clear the field and go back to the initial state, with no peak marks."""
         self._peak_mode = False
         self._peaks_var.set("")
-        self._peaks_entry.state(["disabled"])
-        self._peak_btn.configure(text="Show confirmed peaks")
+        self._peak_btn.configure(text="Show confirmed peaks", command=self._start_peak_selection)
         if self._confirmed_default:
             self._peak_btn.state(["!disabled"])
         self._peak_hint_var.set("")
+        self._clear_error()
         self._redraw_peak_markers()
 
     def _on_curve_click(self, event):
@@ -239,6 +254,7 @@ class NaiveView:
         new = toggle_peak(positions, frame, self._xr_x, self._xr_y, candidates=[f for f, _ in self._candidates])
         if new != positions:
             self._peaks_var.set(format_positions(new))
+            self._redraw_peak_markers()
 
     def _redraw_peak_markers(self):
         for artist in self._marker_artists:
