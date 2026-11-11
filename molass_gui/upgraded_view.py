@@ -99,10 +99,13 @@ class UpgradedView:
         self._continuity_btn = ttk.Button(hdr, text="Continuity\u2026",
                                           command=self._show_continuity, state="disabled")
         self._continuity_btn.pack(side=tk.RIGHT, padx=8)
+        self._mass_btn = ttk.Button(hdr, text="Mass\u2026", command=self._show_mass, state="disabled")
+        self._mass_btn.pack(side=tk.RIGHT, padx=8)
         if self._rgcurve is not None:
             self._params_btn.state(["!disabled"])
             self._homog_btn.state(["!disabled"])
             self._continuity_btn.state(["!disabled"])
+            self._mass_btn.state(["!disabled"])
         self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
             side=tk.LEFT, padx=8)
@@ -132,6 +135,14 @@ class UpgradedView:
         self._params_btn.state(["!disabled"])
         self._homog_btn.state(["!disabled"])
         self._continuity_btn.state(["!disabled"])
+        self._mass_btn.state(["!disabled"])
+
+    def _show_mass(self):
+        from molass_gui.mass_dialog import show_mass
+        from molass_gui.homogeneity_dialog import _heading
+        show_mass(self._win, self._status_var, self._decomp, rgcurve=self._rgcurve,
+                  stage=f"Upgraded \u2014 {model_display_name(self._model_info['model'])}",
+                  heading=_heading(self._decomp))
 
     def _show_continuity(self):
         # the verdict uses the data Rg curve only, so it does not depend on the elution model

@@ -18,6 +18,13 @@ def _show_continuity(win, status_var, result, rgcurve):
     show_continuity(win, status_var, result, rgcurve=rgcurve, stage="Rigorous", heading=_heading(result))
 
 
+def _show_mass(win, status_var, result, rgcurve):
+    """Masses of exactly the result shown here."""
+    from molass_gui.homogeneity_dialog import _heading
+    from molass_gui.mass_dialog import show_mass
+    show_mass(win, status_var, result, rgcurve=rgcurve, stage="Rigorous", heading=_heading(result))
+
+
 def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
     """Load the best completed result from *analysis_folder* and show its
     plot_components() figure in a Toplevel dialog.
@@ -71,6 +78,8 @@ def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=
               command=lambda: show_kratky_shape_match_for_result(win, result)).pack(side=tk.LEFT, padx=4)
     ttk.Button(btn_row, text="Continuity\u2026",
               command=lambda: _show_continuity(win, status_var, result, rgcurve)).pack(side=tk.LEFT, padx=4)
+    ttk.Button(btn_row, text="Mass\u2026",
+              command=lambda: _show_mass(win, status_var, result, rgcurve)).pack(side=tk.LEFT, padx=4)
     _close = lambda: close_dialog_figure(dlg, plot_result.fig)
     ttk.Button(btn_row, text="Close", command=_close).pack(side=tk.LEFT, padx=4)
     dlg.protocol("WM_DELETE_WINDOW", _close)

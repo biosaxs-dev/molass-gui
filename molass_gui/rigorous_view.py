@@ -17,6 +17,7 @@ from molass_gui.plot_components_dialog import show_plot_components_lazy
 from molass_gui.kratky_shape_match_dialog import show_kratky_shape_match_lazy
 from molass_gui.homogeneity_dialog import show_homogeneity_lazy
 from molass_gui.continuity_dialog import show_continuity_lazy
+from molass_gui.mass_dialog import show_mass_lazy
 from molass_gui.denss_view import show_denss_lazy
 from molass_gui.ranks_dialog import show_set_ranks_lazy
 from molass_gui.window_tree import register_window_cleanup, register_close_guard
@@ -198,6 +199,7 @@ class RigorousView:
                                      command=self._homogeneity, state="disabled")
         self._continuity_btn = ttk.Button(hdr, text="Continuity\u2026",
                                           command=self._continuity, state="disabled")
+        self._mass_btn = ttk.Button(hdr, text="Mass\u2026", command=self._mass, state="disabled")
         self._denss_btn = ttk.Button(hdr, text="Run DENSS\u2026",
                                      command=self._run_denss, state="disabled")
         self._ranks_btn = ttk.Button(hdr, text="Set Ranks\u2026",
@@ -223,6 +225,7 @@ class RigorousView:
             self._ranks_btn.state(["!disabled"])
             self._homog_btn.state(["!disabled"])
             self._continuity_btn.state(["!disabled"])
+            self._mass_btn.state(["!disabled"])
 
         ttk.Label(win, text=f"Output: {self._analysis_folder}", foreground="gray",
                   padding=(8, 0)).pack(fill=tk.X, anchor=tk.W)
@@ -325,6 +328,7 @@ class RigorousView:
         self._ranks_btn.state(["!disabled"])
         self._homog_btn.state(["!disabled"])
         self._continuity_btn.state(["!disabled"])
+        self._mass_btn.state(["!disabled"])
         self._optimize()  # auto-start; user can Terminate if needed
 
     def _prep_main_result(self):
@@ -421,6 +425,7 @@ class RigorousView:
         self._ranks_btn.state(["!disabled"])
         self._homog_btn.state(["!disabled"])
         self._continuity_btn.state(["!disabled"])
+        self._mass_btn.state(["!disabled"])
         # self._resume_btn was created already-enabled in show() -- no further
         # action needed here (and no .configure()/.state() call on it, since
         # this runs right after the .configure()-breaking import; see show()).
@@ -441,11 +446,13 @@ class RigorousView:
         self._denss_btn.pack_forget()
         self._ranks_btn.pack_forget()
         self._continuity_btn.pack_forget()
+        self._mass_btn.pack_forget()
         self._action_btn.pack(side=tk.RIGHT, padx=8)
         self._params_btn.pack(side=tk.RIGHT, padx=8)
         self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
         self._homog_btn.pack(side=tk.RIGHT, padx=8)
         self._continuity_btn.pack(side=tk.RIGHT, padx=8)
+        self._mass_btn.pack(side=tk.RIGHT, padx=8)
         self._shapeanalysis_btn.pack(side=tk.RIGHT, padx=8)
         self._denss_btn.pack(side=tk.RIGHT, padx=8)
         self._ranks_btn.pack(side=tk.RIGHT, padx=8)
@@ -464,6 +471,7 @@ class RigorousView:
         self._denss_btn.pack_forget()
         self._ranks_btn.pack_forget()
         self._continuity_btn.pack_forget()
+        self._mass_btn.pack_forget()
         self._resume_btn.pack(side=tk.RIGHT, padx=8)
         self._resume_jobs_spin.pack(side=tk.RIGHT, padx=(0, 4))
         self._resume_jobs_label.pack(side=tk.RIGHT, padx=(8, 0))
@@ -471,6 +479,7 @@ class RigorousView:
         self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
         self._homog_btn.pack(side=tk.RIGHT, padx=8)
         self._continuity_btn.pack(side=tk.RIGHT, padx=8)
+        self._mass_btn.pack(side=tk.RIGHT, padx=8)
         self._shapeanalysis_btn.pack(side=tk.RIGHT, padx=8)
         self._denss_btn.pack(side=tk.RIGHT, padx=8)
         self._ranks_btn.pack(side=tk.RIGHT, padx=8)
@@ -586,6 +595,11 @@ class RigorousView:
         rgcurve = self._decomp_for_opt.get_rg_curve()
         show_continuity_lazy(self._win, self._status_var, self._decomp_for_opt,
                              self._analysis_folder, rgcurve=rgcurve, xr_ranks=self._xr_ranks)
+
+    def _mass(self):
+        rgcurve = self._decomp_for_opt.get_rg_curve()
+        show_mass_lazy(self._win, self._status_var, self._decomp_for_opt,
+                       self._analysis_folder, rgcurve=rgcurve, xr_ranks=self._xr_ranks)
 
     def _run_denss(self):
         rgcurve = self._decomp_for_opt.get_rg_curve()

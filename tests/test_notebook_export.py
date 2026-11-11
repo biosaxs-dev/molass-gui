@@ -63,6 +63,22 @@ def test_export_of_chosen_peak_positions():
     assert "quick_decomposition(num_components=3" in decomp_cell
 
 
+def test_export_has_the_mass_cell_with_its_caveat_after_the_decomposition():
+    ctx = SessionContext(molass_data.SAMPLE1)
+    ctx.num_components = 3
+    codes = [c.source for c in build_notebook(ctx).cells if c.cell_type == "code"]
+    i = next(i for i, c in enumerate(codes) if "quick_decomposition" in c)
+    mass = codes[i + 1]
+    assert "decomp.get_xr_components()" in mass and "comp.get_volume_mass()" in mass
+    assert "corrected.get_volume_mass_curve().plot()" in mass
+    assert "protein calibration" in mass or "0.77-0.95" in mass
+    ctx.model_info = {"model": "sdm"}
+    mass = next(c for c in (c.source for c in build_notebook(ctx).cells) if "get_volume_mass()" in c)
+    assert "decomp_sdm.get_xr_components()" in mass          # the active (upgraded) decomposition
+    ctx.num_components = None
+    assert not any("get_volume_mass" in c.source for c in build_notebook(ctx).cells)
+
+
 @pytest.fixture
 def anomaly_handling_off():
     from molass.Global.Options import get_molass_options, set_molass_options

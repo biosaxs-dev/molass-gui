@@ -148,6 +148,17 @@ def build_notebook(ctx):
         cells.append(_code(_upgrade_call(ctx.model_info, active_var)
                           + f"\n{active_var}.plot_components(rgcurve=rgcurve)"))
 
+    if ctx.num_components is not None:
+        # protein calibration, not an exact value: the caveat travels with the numbers (molass-gui#13)
+        cells.append(_code(
+            "# Volume-of-correlation mass (concentration-free): a protein calibration, 0.77-0.95 of the\n"
+            "# sequence mass on 11 SASBDB proteins; not for non-protein or strongly non-compact particles.\n"
+            f"for k, comp in enumerate({active_var}.get_xr_components(), start=1):\n"
+            "    vm = comp.get_volume_mass()\n"
+            "    print(f\"component {k}: Rg = {vm.rg:.1f} A, mass = {vm.mass:.2g} kDa\")\n"
+            "corrected.get_volume_mass_curve().plot()"
+        ))
+
     if ctx.method is not None:
         cells.append(_code(
             f"score = {active_var}.score(trimmed_ssd=trimmed)\n"
