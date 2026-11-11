@@ -1,14 +1,38 @@
 """High-DPI display support (Windows), kept in one place.
 
 Without it Windows treats the process as DPI-unaware and bitmap-scales every window (blurry on a 4K screen at 150 %).
-``enable()`` (before the first Tk window) makes the process system-DPI aware; Tk then scales its fonts by itself, and
-``init(root)`` carries the same factor to what is fixed in pixels: matplotlib figures (``figure.dpi``) and the sizes
-written as ``px(...)`` / ``geometry(...)``. At 100 % everything is as before.
+``enable()`` (before the first Tk window) makes the process system-DPI aware, so text and plots are drawn sharply.
+``init(root)`` then fixes the *size* of the interface by one scale factor: 1.0 is the size of a 100 % display
+(the default, compact), ``auto`` follows the system scaling (150 % -> 1.5), any number in between or above is allowed
+(``--ui-scale``). The factor goes to Tk (font scaling), to matplotlib (``figure.dpi``) and to the sizes written as
+``px(...)`` / ``geometry(...)``.
 """
 import sys
 
-_factor = 1.0
+DEFAULT_UI_SCALE = "1.0"
+MIN_SCALE, MAX_SCALE = 0.5, 4.0
 BASE_FIGURE_DPI = 100.0     # matplotlib's default, kept for savefig so that exported images do not change
+
+_factor = 1.0
+_requested = DEFAULT_UI_SCALE
+
+
+def parse_ui_scale(text):
+    """``"auto"`` -> None (follow the system), ``"1.25"`` -> 1.25. Raises ValueError for anything else."""
+    text = str(text).strip().lower()
+    if text == "auto":
+        return None
+    value = float(text)
+    if not MIN_SCALE <= value <= MAX_SCALE:
+        raise ValueError(f"the UI scale must be 'auto' or between {MIN_SCALE} and {MAX_SCALE}")
+    return value
+
+
+def set_ui_scale(text):
+    """The scale chosen at start-up (``--ui-scale``), used by ``init``."""
+    global _requested
+    parse_ui_scale(text)
+    _requested = text
 
 
 def enable():
@@ -26,13 +50,16 @@ def enable():
 
 
 def init(root):
-    """Read the scale factor from the Tk root (pixels per inch / 96) and apply it to matplotlib. Returns the factor."""
+    """Decide the scale factor for this session and apply it to Tk and matplotlib. Returns the factor."""
     global _factor
-    _factor = max(1.0, float(root.winfo_fpixels("1i")) / 96.0)
-    if _factor != 1.0:
-        import matplotlib
-        matplotlib.rcParams["figure.dpi"] = BASE_FIGURE_DPI * _factor
-        matplotlib.rcParams["savefig.dpi"] = BASE_FIGURE_DPI
+    system = max(1.0, float(root.winfo_fpixels("1i")) / 96.0)
+    chosen = parse_ui_scale(_requested)
+    _factor = system if chosen is None else chosen
+    # Tk sizes its fonts (given in points) by this value: 96 dpi / 72 points per inch at factor 1.0
+    root.tk.call("tk", "scaling", 96.0 * _factor / 72.0)
+    import matplotlib
+    matplotlib.rcParams["figure.dpi"] = BASE_FIGURE_DPI * _factor
+    matplotlib.rcParams["savefig.dpi"] = BASE_FIGURE_DPI
     return _factor
 
 

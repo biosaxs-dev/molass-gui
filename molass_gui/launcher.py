@@ -154,6 +154,7 @@ def _ensure_std_streams():
 def main():
     _ensure_std_streams()
     import argparse
+    from molass_gui import dpi
     parser = argparse.ArgumentParser()
     parser.add_argument("--dropbox-support", action="store_true",
                         help="Enable Dropbox folder auto-detection/sync (experimental, off by default)")
@@ -165,10 +166,16 @@ def main():
     parser.add_argument("--no-dpi-aware", action="store_true",
                         help="Let Windows scale the windows (blurry on a high-resolution screen) instead of "
                              "drawing them at the screen's own resolution")
+    parser.add_argument("--ui-scale", default=dpi.DEFAULT_UI_SCALE, metavar="X",
+                        help="Size of the windows: 1.0 (default) is the size on a 100%% display, 'auto' follows "
+                             "the Windows display scaling (e.g. 1.5 at 150%%), or a number such as 1.25")
     args = parser.parse_args()
+    try:
+        dpi.set_ui_scale(args.ui_scale)
+    except ValueError as exc:
+        parser.error(f"--ui-scale: {exc}")
 
     if not args.no_dpi_aware:
-        from molass_gui import dpi
         dpi.enable()    # before the first Tk window
 
     if args.no_anomaly_handling:
