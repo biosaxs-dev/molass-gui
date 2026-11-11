@@ -126,6 +126,38 @@ def test_the_default_peaks_give_way_to_components_and_to_clear(root):
     assert view._peaks_var.get() == "" and view._nc_var.get() == 5     # back to the plain default
 
 
+def test_editing_the_default_peaks_keeps_the_edit(root):
+    """Adding or removing a peak (by typing or by a click) in the pre-filled field must not clear it: Components
+    follows the new count, and Decompose uses exactly these peaks, not the greedy default."""
+    corrected = FakeCorrected(SEVEN, confirmed=[40, 84, 117], confirmed_opts=THREE)
+    view = open_view(root, corrected)
+    for text in ("10, 40, 84, 117", "40, 84", "40, 84, 117, 190", "40, 84, 117, 1"):   # the last: typing in progress
+        view._peaks_var.set(text)
+        assert view._peaks_var.get() == text and view._auto_positions is None
+    view._peaks_var.set("10, 40, 84, 117, 190")
+    assert view._nc_var.get() == 5
+    run_loop(root, lambda: corrected.calls and "stop here" in view._status_var.get(), first=view._decompose)
+    assert corrected.calls == [{"num_components": 5, "xr_peakpositions": [10, 40, 84, 117, 190]}]
+
+
+def test_a_click_on_the_curve_adds_a_peak_to_the_default_ones(root):
+    from molass_gui.peak_selection import toggle_peak
+    view = open_view(root, FakeCorrected(SEVEN, confirmed=[40, 84, 117], confirmed_opts=THREE))
+    new = toggle_peak(view._current_positions(), 190, view._xr_x, view._xr_y, candidates=[f for f, _ in view._candidates])
+    view._peaks_var.set(", ".join(str(p) for p in new))          # what _on_curve_click does
+    assert view._peaks_var.get() == "40, 84, 117, 190" and view._nc_var.get() == 4
+
+
+def test_typed_proportions_replace_the_default_peaks(root):
+    corrected = FakeCorrected(SEVEN, confirmed=[40, 84, 117], confirmed_opts=THREE)
+    view = open_view(root, corrected)
+    assert view._peaks_var.get() == "40, 84, 117"
+    view._proportions_var.set("1, 2")
+    assert view._peaks_var.get() == "" and view._nc_var.get() == 2
+    run_loop(root, lambda: corrected.calls and "stop here" in view._status_var.get(), first=view._decompose)
+    assert corrected.calls == [{"num_components": 2, "proportions": [1.0, 2.0]}]
+
+
 def test_a_failure_after_the_detection_is_shown_and_leaves_the_manual_default(root, monkeypatch):
     def boom(*_args):
         raise ValueError("boom")

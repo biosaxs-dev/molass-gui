@@ -224,10 +224,12 @@ class NaiveView:
         # Like Proportions, a chosen set of peaks fixes the number of components: reflect it live. The plot is
         # not redrawn here (that would flicker while typing): see _redraw_positions.
         positions = self._current_positions()
+        if self._auto_positions is not None and positions != self._auto_positions:
+            # the user's own choice now; must be settled before Components is set below, whose change handler
+            # would otherwise take the edit for a clash with the default peaks and clear the field
+            self._auto_positions = None
         if positions:
             self._nc_var.set(len(positions))
-        if self._auto_positions is not None and positions != self._auto_positions:
-            self._auto_positions = None    # the user's own choice now
 
     def _on_components_changed(self, *_args):
         # Components set away from the number of default peaks: the user wants something else, so the default
@@ -337,6 +339,11 @@ class NaiveView:
         # text doesn't yet parse (e.g. mid-edit, trailing comma) rather than
         # showing an error on every keystroke.
         text = self._proportions_var.get().strip()
+        if text and self._auto_positions is not None:
+            # typed proportions replace the default peaks (the two exclude each other)
+            self._auto_positions = None
+            self._peaks_var.set("")
+            self._clear_error()
         # before= pins the checkbox's position regardless of pack() call order --
         # it's shown/hidden repeatedly as the user types, so relying on call order
         # alone would drift it to the end of the LEFT stack after the first toggle.
