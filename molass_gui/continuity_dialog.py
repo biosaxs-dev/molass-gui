@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from molass_gui.continuity_logic import UNAVAILABLE_MESSAGE, BUSY_MESSAGE, is_available, window_title, report_text
+from molass_gui.dpi import geometry
 from molass_gui.plot_embed import embed_plot, close_dialog_figure
 
 
@@ -81,7 +82,7 @@ class ContinuityDialog:
         self.report = report
         dlg = self._dlg = tk.Toplevel(win)
         dlg.title(window_title(stage))
-        dlg.geometry("1200x860")
+        dlg.geometry(geometry(1200, 860))
 
         text = tk.Text(dlg, wrap=tk.WORD, height=15, font=("Courier New", 9))
         text.insert("1.0", report_text(report, heading))

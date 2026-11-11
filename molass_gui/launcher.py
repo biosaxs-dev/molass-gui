@@ -12,14 +12,15 @@ from tkinter import ttk
 class Launcher(tk.Tk):
     def __init__(self):
         super().__init__()
-        from molass_gui import get_version
+        from molass_gui import dpi, get_version
+        dpi.init(self)   # after dpi.enable() in main(): the scale factor for what is fixed in pixels
         self.title("Molass %s" % get_version())
         self.resizable(False, False)
         self._configure_style()
         self._build_ui()
         self.update_idletasks()
         # widen if needed so the titlebar text isn't clipped by content width
-        width = max(self.winfo_reqwidth(), 320)
+        width = max(self.winfo_reqwidth(), dpi.px(320))
         self.geometry("%dx%d" % (width, self.winfo_reqheight()))
         self.protocol("WM_DELETE_WINDOW", self.close_session)
 
@@ -161,7 +162,14 @@ def main():
     parser.add_argument("--no-anomaly-handling", action="store_true",
                         help="Do not exclude an irregular UV end from the trimming/mapping (to observe the "
                              "anomaly itself; molass's default is to handle it)")
+    parser.add_argument("--no-dpi-aware", action="store_true",
+                        help="Let Windows scale the windows (blurry on a high-resolution screen) instead of "
+                             "drawing them at the screen's own resolution")
     args = parser.parse_args()
+
+    if not args.no_dpi_aware:
+        from molass_gui import dpi
+        dpi.enable()    # before the first Tk window
 
     if args.no_anomaly_handling:
         # trimming runs in this process (see app.py), so the global option is enough

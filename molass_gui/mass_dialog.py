@@ -10,6 +10,7 @@ from tkinter import ttk
 
 from molass_gui.mass_logic import (UNAVAILABLE_MESSAGE, BUSY_MESSAGE, CAVEAT, is_available, window_title,
                                    compute_mass)
+from molass_gui.dpi import geometry, px
 from molass_gui.plot_embed import embed_plot, close_dialog_figure
 
 
@@ -73,12 +74,12 @@ class MassDialog:
     """The component table, the caveat, and the per-frame curve below."""
 
     COLUMNS = (("component", "Component", 90), ("rg", "Rg (\u00c5)", 90), ("mass", "Mass (kDa)", 110),
-               ("note", "Note", 520))
+               ("note", "Note", 520))      # widths for 96 dpi, see dpi.px
 
     def __init__(self, win, rows, curve, curve_error, stage=None, heading=None):
         dlg = self._dlg = tk.Toplevel(win)
         dlg.title(window_title(stage))
-        dlg.geometry("1000x820")
+        dlg.geometry(geometry(1000, 820))
 
         if heading:
             ttk.Label(dlg, text=heading).pack(anchor=tk.W, padx=8, pady=(8, 0))
@@ -86,14 +87,14 @@ class MassDialog:
                             height=max(1, min(len(rows), 8)), selectmode="none")
         for key, title, width in self.COLUMNS:
             tree.heading(key, text=title)
-            tree.column(key, width=width, anchor=tk.W if key == "note" else tk.CENTER)
+            tree.column(key, width=px(width), anchor=tk.W if key == "note" else tk.CENTER)
         for row in rows:
             tree.insert("", tk.END, values=row)
         tree.pack(fill=tk.X, padx=8, pady=(8, 4))
         self._tree = tree
 
         # always visible, not a tooltip: a mass must not be read as an exact value
-        ttk.Label(dlg, text=CAVEAT, wraplength=960, justify=tk.LEFT, foreground="#7a3b00").pack(
+        ttk.Label(dlg, text=CAVEAT, wraplength=px(960), justify=tk.LEFT, foreground="#7a3b00").pack(
             fill=tk.X, padx=8, pady=4)
 
         figframe = ttk.Frame(dlg)

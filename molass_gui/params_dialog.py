@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from molass.Rigorous import build_params_table
+from molass_gui.dpi import geometry, px
 
 _PER_COMPONENT_SECTIONS = ('xr', 'uv')
 
@@ -31,7 +32,7 @@ def show_params_dialog(parent, optimizer, params, title="Parameters"):
 
     win = tk.Toplevel(parent)
     win.title(title)
-    win.geometry("700x600")
+    win.geometry(geometry(700, 600))
 
     per_comp = df[df["section"].isin(_PER_COMPONENT_SECTIONS)]
     scalar = df[~df["section"].isin(_PER_COMPONENT_SECTIONS)]
@@ -90,10 +91,10 @@ def _build_per_component_tree(win, df):
     frame.pack(fill=tk.BOTH, expand=True, padx=8)
     tree = ttk.Treeview(frame, columns=columns, show="tree headings", height=12)
     tree.heading("#0", text="Section / Label")
-    tree.column("#0", width=160)
+    tree.column("#0", width=px(160))
     for c, col in zip(components, columns):
         tree.heading(col, text=f"Comp {c}")
-        tree.column(col, width=100, anchor="e")
+        tree.column(col, width=px(100), anchor="e")
 
     vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
     tree.configure(yscrollcommand=vsb.set)
@@ -117,9 +118,9 @@ def _build_scalar_tree(win, df):
     frame.pack(fill=tk.BOTH, expand=False, padx=8, pady=(0, 8))
     tree = ttk.Treeview(frame, columns=("value",), show="tree headings", height=8)
     tree.heading("#0", text="Section / Label")
-    tree.column("#0", width=160)
+    tree.column("#0", width=px(160))
     tree.heading("value", text="Value")
-    tree.column("value", width=120, anchor="e")
+    tree.column("value", width=px(120), anchor="e")
 
     vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
     tree.configure(yscrollcommand=vsb.set)

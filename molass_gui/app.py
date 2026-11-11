@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from molass_gui import feature_flags, recent_folders
+from molass_gui.dpi import px
 from molass_gui.session_context import to_dropbox_path
 from molass_gui.trimming_info import SMALL_ANGLE_LIMITS, small_angle_limit_from_label, trim_kwargs
 
@@ -75,7 +76,7 @@ class App:
         self._status_var = tk.StringVar(value="Ready.")
         # wraplength caps the label so a long status message (e.g. a full
         # cache path) wraps instead of widening the fixed-size dialog.
-        ttk.Label(f, textvariable=self._status_var, foreground="gray", wraplength=400).grid(
+        ttk.Label(f, textvariable=self._status_var, foreground="gray", wraplength=px(400)).grid(
             row=6, column=0, columnspan=3, sticky=tk.W)
 
         # Indeterminate: the Dropbox bulk-zip download has no byte-level

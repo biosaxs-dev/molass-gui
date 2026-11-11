@@ -15,6 +15,8 @@ selectable/copyable (but read-only) Text widget plus a one-click Copy button.
 import tkinter as tk
 from tkinter import ttk
 
+from molass_gui.dpi import geometry
+
 _STATUS_SUMMARY_MAX = 100
 
 
@@ -40,7 +42,7 @@ def show_error_detail(win, status_var, message, title="Error", prefix="Error"):
 
     dlg = tk.Toplevel(win)
     dlg.title(title)
-    dlg.geometry("640x320")
+    dlg.geometry(geometry(640, 320))
     dlg.transient(win)
 
     frame = ttk.Frame(dlg, padding=8)

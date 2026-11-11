@@ -11,6 +11,7 @@ from tkinter import ttk
 from molass_gui.homogeneity_logic import (PRESETS, default_proxy_names, normalize_proxy_name, preset_pairs,
                                           pairs_from_matrix, parse_cores, format_cores, window_title,
                                           figure_title)
+from molass_gui.dpi import geometry, px
 from molass_gui.plot_embed import embed_plot, close_dialog_figure
 
 _HELP = ("Ratio of two concentration proxies is flat across a peak of one species. XR-only ratios (size/shape) and "
@@ -127,7 +128,7 @@ class HomogeneityDialog:
 
         dlg = self._dlg = tk.Toplevel(win)
         dlg.title(window_title(stage))
-        dlg.geometry("1300x900")
+        dlg.geometry(geometry(1300, 900))
 
         left = ttk.Frame(dlg, padding=8)
         left.pack(side=tk.LEFT, fill=tk.Y)
@@ -146,7 +147,7 @@ class HomogeneityDialog:
             ttk.Radiobutton(left, text="Optimized (rigorous)", variable=self._map_var, value="optimized",
                             command=self._recompute).pack(anchor=tk.W, padx=12)
             ttk.Label(left, text=f"optimized vs estimated, equivalent shift in XR frames: {info}",
-                      foreground="gray", wraplength=300, justify=tk.LEFT).pack(anchor=tk.W, pady=(2, 8))
+                      foreground="gray", wraplength=px(300), justify=tk.LEFT).pack(anchor=tk.W, pady=(2, 8))
 
         ttk.Label(left, text="Ratio set:").pack(anchor=tk.W)
         self._preset_var = tk.StringVar(master=dlg, value="Default")
@@ -194,8 +195,8 @@ class HomogeneityDialog:
         ttk.Button(crow, text="Auto", command=self._auto_cores_reset).pack(side=tk.LEFT)
 
         self._status_var = tk.StringVar(master=dlg, value="")
-        ttk.Label(left, textvariable=self._status_var, foreground="firebrick", wraplength=300).pack(anchor=tk.W, pady=6)
-        ttk.Label(left, text=_HELP, foreground="gray", wraplength=300, justify=tk.LEFT).pack(anchor=tk.W, pady=6)
+        ttk.Label(left, textvariable=self._status_var, foreground="firebrick", wraplength=px(300)).pack(anchor=tk.W, pady=6)
+        ttk.Label(left, text=_HELP, foreground="gray", wraplength=px(300), justify=tk.LEFT).pack(anchor=tk.W, pady=6)
         ttk.Button(left, text="Close", command=self._close).pack(side=tk.BOTTOM, pady=4)
 
         self._plot_frame = ttk.Frame(right)
