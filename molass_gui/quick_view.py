@@ -230,6 +230,8 @@ class QuickView:
         from molass_gui.homogeneity_dialog import _heading
         show_mass(self._win, self._status_var, self._decomp, rgcurve=self._rgcurve,
                   stage="Quick", heading=_heading(self._decomp))
+
+    def _show_continuity(self):
         from molass_gui.continuity_dialog import show_continuity
         from molass_gui.homogeneity_dialog import _heading
         show_continuity(self._win, self._status_var, self._decomp, rgcurve=self._rgcurve,
