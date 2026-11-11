@@ -193,6 +193,37 @@ def test_a_failed_detection_ends_the_busy_state(root, monkeypatch):
     assert not _busy_cursor(view._win)
 
 
+def test_a_shortfall_and_the_library_warning_reach_the_next_view(root, monkeypatch):
+    """Asked for 5, the library warns and returns 3: QuickView gets the notices (molass-gui#19)."""
+    import warnings
+    import molass_gui.quick_view as quick_view
+
+    class ShortCorrected(FakeCorrected):
+        def quick_decomposition(self, **kwargs):
+            self.calls.append(kwargs)
+            warnings.warn(f"quick_decomposition(num_components={kwargs['num_components']}) returned 3 components: "
+                          "peak recognition found only 3 peaks. To get 5 components, pass proportions=[1]*5.", UserWarning)
+            return SimpleNamespace(get_num_components=lambda: 3)
+
+    received = {}
+
+    class RecordingQuickView:
+        def __init__(self, *args, found_notices=(), **kwargs):
+            received["notices"] = list(found_notices)
+
+        def show(self):
+            pass
+
+    monkeypatch.setattr(quick_view, "QuickView", RecordingQuickView)
+    corrected = ShortCorrected(AUTO)
+    view = open_view(root, corrected)
+    view._nc_var.set(5)
+    view._win.withdraw = lambda: None
+    run_loop(root, lambda: "notices" in received, first=view._decompose)
+    assert received["notices"][0] == "Asked for 5 components, got 3."
+    assert received["notices"][1].startswith("To get 5 components")
+
+
 def test_a_failure_after_the_detection_is_shown_and_leaves_the_manual_default(root, monkeypatch):
     def boom(*_args):
         raise ValueError("boom")

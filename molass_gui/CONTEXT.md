@@ -59,6 +59,14 @@ Use `busy.begin(...)` / `token.end()` around a background thread (give a `key` s
 `with busy.working(...)` around work on the main thread. Do not set the status text or disable the button by hand for
 this. The Rigorous run keeps its own live display (progress bar during preparation, SV and job label while running).
 
+## What the library says is shown (notices.py)
+
+molass reports problems as `UserWarning`s (fewer components than requested, an implausible component Rg, an implausible
+UV/XR mapping). The GUI records them around the library call (`notices.capture()`), adds "Asked for N components, got M"
+and shows the first one in a notice bar of the next view with a Details button (`NoticeBar`); nothing pops up. At present
+the Decompose step and the mapping check of the Naive View feed it; a new step that calls a molass computation can do the
+same with `capture()` / `build_notices()`.
+
 ## Sharp edges for anyone extending this GUI
 
 ### Never touch Tk/matplotlib artifacts from a background thread

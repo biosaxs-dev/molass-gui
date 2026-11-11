@@ -3,7 +3,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from molass_gui import busy, feature_flags
+from molass_gui import busy, feature_flags, notices
 from molass_gui.model_names import model_display_name
 from molass_gui.plot_embed import embed_plot, export_component_data
 from molass_gui.rgcurve_worker import start_rgcurve_worker, attach_rgcurve_worker, rgcurve_n_frames
@@ -25,8 +25,9 @@ _IMMATURE_MODEL_LABELS = {'EGH \u2192 SDM (lognormal)'}
 
 class QuickView:
     def __init__(self, decomp, trimmed, nc, ctx, parent=None, app_root=None, session_tag=None,
-                 rgcurve_queue=None):
+                 rgcurve_queue=None, found_notices=()):
         self._decomp = decomp
+        self._notices = list(found_notices)   # what molass said when the decomposition was made (molass-gui#19)
         self._trimmed = trimmed
         self._nc = nc
         self._ctx = ctx
@@ -137,6 +138,8 @@ class QuickView:
             else:
                 self._action_btn.configure(text='Upgrade', command=self._upgrade)
         self._model_var.trace_add('write', _on_model_change)
+
+        self._notice_bar = notices.NoticeBar(win, self._notices)
 
         # Show EGH plot_components immediately; Rg curve overlay follows once ready.
         # Attach to the computation NaiveView._detect_worker already kicked off (far

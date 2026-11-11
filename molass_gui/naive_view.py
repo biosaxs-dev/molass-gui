@@ -7,7 +7,7 @@ import numpy as np
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 
-from molass_gui import busy
+from molass_gui import busy, notices
 from molass_gui.peak_selection import (parse_positions, format_positions, classify_peaks, default_selection,
                                        default_peak_positions, toggle_peak)
 from molass_gui.naive_logic import choose_decomposition, FALLBACK_LUMPING_WEIGHT  # noqa: F401 (re-exported)
@@ -104,7 +104,10 @@ class NaiveView:
         ttk.Label(win, textvariable=self._range_var, foreground="#555", padding=(8, 0)).pack(anchor=tk.W)
 
         # Show trimmed compact plot with baseline overlay
-        result = self._trimmed.plot_compact(baseline=True)
+        # the mapping check of the library warns here when the UV/XR mapping looks implausible (molass-library#371)
+        with notices.capture() as caught:
+            result = self._trimmed.plot_compact(baseline=True)
+        self._plot_warnings = list(caught)
         canvas = FigureCanvasTkAgg(result.fig, master=win)
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -394,7 +397,10 @@ class NaiveView:
             try:
                 # Reuse the detection kicked off by show() -- same corrected data and
                 # recommendation, computed once per session instead of on every click.
-                decomp = self._corrected.quick_decomposition(**choice.quick_kwargs())
+                with notices.capture() as caught:
+                    decomp = self._corrected.quick_decomposition(**choice.quick_kwargs())
+                # what the library said, and whether the count is what was asked for (molass-gui#19)
+                found = notices.build_notices(nc, decomp.get_num_components(), self._plot_warnings + caught)
             except Exception as exc:
                 msg = str(exc) or type(exc).__name__
                 self._win.after(0, lambda: on_error(msg))
@@ -413,7 +419,7 @@ class NaiveView:
                     from molass_gui.quick_view import QuickView
                     QuickView(decomp, self._trimmed, nc, self._ctx, parent=self._win,
                               app_root=self._app_root, session_tag=self._session_tag,
-                              rgcurve_queue=self._rgcurve_queue).show()
+                              rgcurve_queue=self._rgcurve_queue, found_notices=found).show()
                     self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
                     self._rgcurve_go.set()  # resume the Rg curve now that QuickView is up
                 except Exception as exc:  # a Tk callback: its traceback would only reach a stderr nobody reads
