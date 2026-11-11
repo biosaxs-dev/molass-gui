@@ -24,3 +24,10 @@ def test_view_commands_and_calls_resolve_to_methods(name):
                     if isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name) and t.value.id == "self"}
         missing = sorted((called | commands) - defined - assigned)
         assert not missing, f"{cls.name} has no method {missing}"
+        # an attribute that is read but never assigned (a dropped ``self._x = ...`` line only shows at run time)
+        read = {n.attr for n in ast.walk(cls) if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Load)
+                and isinstance(n.value, ast.Name) and n.value.id == "self"}
+        stored = {n.attr for n in ast.walk(cls) if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Store)
+                  and isinstance(n.value, ast.Name) and n.value.id == "self"}
+        never_set = sorted(read - stored - defined)
+        assert not never_set, f"{cls.name} reads {never_set}, which is never assigned"

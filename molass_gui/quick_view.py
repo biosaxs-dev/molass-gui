@@ -117,6 +117,7 @@ class QuickView:
         self._continuity_btn.pack(side=tk.RIGHT, padx=8)
         self._mass_btn = ttk.Button(hdr, text="Mass\u2026", command=self._show_mass, state="disabled")
         self._mass_btn.pack(side=tk.RIGHT, padx=8)
+        self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(
             side=tk.LEFT, padx=8)
         self._rg_var = tk.StringVar(value="")
