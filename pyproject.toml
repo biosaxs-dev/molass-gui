@@ -7,7 +7,7 @@ name = "molass_gui"
 version = "0.5.3"
 
 dependencies = [
-  "molass>=1.2.3",
+  "molass>=1.2.4",
   "molass_legacy>=1.7.2",
   "nbformat",
 ]
