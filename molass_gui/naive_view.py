@@ -9,17 +9,8 @@ from matplotlib.lines import Line2D
 
 from molass_gui.peak_selection import (parse_positions, format_positions, classify_peaks, default_selection,
                                        toggle_peak)
+from molass_gui.naive_logic import choose_decomposition, FALLBACK_LUMPING_WEIGHT  # noqa: F401 (re-exported)
 from molass_gui.trimming_info import fmt_qrange, fmt_interparticle_hint
-
-# LumpingConstraint's own default (0.2) is calibrated for confident,
-# independently-detected peak positions. When the equal-split fallback fires,
-# a component's "position" is just the centroid of an arbitrary equal-area
-# cut (see molass-library/molass/Decompose/Proportional.py) -- not a real
-# detection. This weight is loose enough to not penalize legitimate
-# refinement near that unconfirmed default, while still blocking gross
-# (500+ frame) drift/collapse. See molass-gui#3.
-FALLBACK_LUMPING_WEIGHT = 0.01
-
 
 class NaiveView:
     def __init__(self, ssd, trimmed, ctx, parent=None, app_root=None, session_tag=None):
@@ -135,6 +126,9 @@ class NaiveView:
         # reused by _decompose) -- same auto-detection recommend_decomposition() uses,
         # so the GUI's own default reproduces exactly what the notebook equivalent would
         # do instead of an arbitrary fixed guess.
+        # The whole body is guarded: an exception in a daemon thread would otherwise vanish
+        # silently and leave the view on "Detecting components..." for good (molass-gui#15).
+        corrected = rgcurve_queue = None
         try:
             corrected = self._trimmed.corrected_copy()
             # Earliest possible start for the Rg curve: get_rg_curve() needs only the
@@ -147,31 +141,41 @@ class NaiveView:
             from molass_gui.rgcurve_worker import start_rgcurve_computation
             rgcurve_queue = start_rgcurve_computation(corrected, go_event=self._rgcurve_go)
             auto_opts = corrected.recommend_decomposition_options()
+
+            # The peaks the XR/UV mapping confirms, to tell them from the merely detected ones in the plot.
+            # Optional: without it (e.g. no UV data) every detected peak is shown as unconfirmed.
+            try:
+                confirmed = [int(p) for p in corrected.estimate_mapping().xr_peaks]
+            except Exception:
+                confirmed = None
+            detected = [int(p) for p in auto_opts.get('xr_peakpositions', [])]   # an ndarray: no `or []`
+            candidates = classify_peaks(detected, confirmed)
+            confirmed_default = default_selection(detected, confirmed)
         except Exception as exc:
-            msg = str(exc)
+            msg = str(exc) or type(exc).__name__
             def on_error(m=msg):
-                self._status_var.set(f"Auto-detect failed ({m}) -- using manual default")
-                self._nc_var.set(3)
-                self._nc_spinbox.state(["!disabled"])
-                self._decomp_btn.state(["!disabled"])
+                # With the corrected data at hand Decompose still works on the manual default (no
+                # detection result: the greedy recognition); without it there is nothing to decompose.
+                if corrected is not None:
+                    self._corrected = corrected
+                    self._rgcurve_queue = rgcurve_queue
+                    self._auto_opts = {}
+                    self._status_var.set(f"Auto-detect failed ({m}) -- using manual default")
+                    self._nc_var.set(3)
+                    self._nc_spinbox.state(["!disabled"])
+                    self._decomp_btn.state(["!disabled"])
+                else:
+                    self._status_var.set(f"Preparing the data failed ({m})")
             self._win.after(0, on_error)
             return
-
-        # The peaks the XR/UV mapping confirms, to tell them from the merely detected ones in the plot.
-        # Optional: without it (e.g. no UV data) every detected peak is shown as unconfirmed.
-        try:
-            confirmed = [int(p) for p in corrected.estimate_mapping().xr_peaks]
-        except Exception:
-            confirmed = None
-        detected = [int(p) for p in auto_opts.get('xr_peakpositions', [])]   # an ndarray: no `or []`
 
         def on_main():
             self._corrected = corrected
             self._rgcurve_queue = rgcurve_queue
             self._auto_opts = auto_opts
             self._nc_var.set(auto_opts.get('num_components', 1))
-            self._candidates = classify_peaks(detected, confirmed)
-            self._confirmed_default = default_selection(detected, confirmed)
+            self._candidates = candidates
+            self._confirmed_default = confirmed_default
             if self._confirmed_default:
                 self._peak_btn.state(["!disabled"])
             # shown in the status label: the rank-2 (interparticle) case is rare
@@ -312,37 +316,16 @@ class NaiveView:
             self._nc_var.set(len(values))
 
     def _decompose(self):
-        custom_text = self._proportions_var.get().strip()
-        custom_proportions = None
-        if custom_text:
-            try:
-                custom_proportions = [float(s) for s in custom_text.split(",")]
-            except ValueError:
-                self._status_var.set("Error: proportions must be comma-separated numbers")
-                return
-
-        # Peak positions is an alternative to Proportions, not a complement: both fix where the
-        # components sit, so giving both is ambiguous.
-        peak_positions = self._current_positions()
-        if peak_positions is None:
-            try:
-                parse_positions(self._peaks_var.get(), self._frame_range())
-            except ValueError as exc:
-                self._status_var.set(f"Error: {exc}")
+        if self._corrected is None:
             return
-        if peak_positions and custom_proportions is not None:
-            self._status_var.set("Error: give either Peak positions or Proportions, not both")
+        try:
+            choice = choose_decomposition(
+                self._proportions_var.get(), self._peaks_var.get(), self._nc_var.get(), self._auto_opts,
+                frames=self._frame_range(), on_uv=self._proportions_source_var.get())
+        except ValueError as exc:
+            self._status_var.set(f"Error: {exc}")
             return
-
-        # Proportions is authoritative when given -- Components is kept in sync
-        # live by _sync_nc_from_proportions, but re-derive here too so a
-        # mismatch can never actually occur regardless of widget-event timing.
-        if custom_proportions is not None:
-            nc = len(custom_proportions)
-        elif peak_positions:
-            nc = len(peak_positions)
-        else:
-            nc = self._nc_var.get()
+        nc = choice.num_components
         self._nc_var.set(nc)
 
         self._decomp_btn.state(["disabled"])
@@ -354,74 +337,41 @@ class NaiveView:
         # once QuickView is actually shown (or on error), letting it resume.
         self._rgcurve_go.clear()
 
+        def on_error(m):
+            from molass_gui.error_dialog import show_error_detail
+            show_error_detail(self._win, self._status_var, m, title="Decomposition failed")
+            self._decomp_btn.state(["!disabled"])
+            self._rgcurve_go.set()  # don't leave the Rg curve stuck paused on failure
+
         def worker():
             try:
                 # Reuse the detection kicked off by show() -- same corrected data and
                 # recommendation, computed once per session instead of on every click.
-                corrected = self._corrected
-                if custom_proportions is not None:
-                    proportions = custom_proportions
-                    trust_proportions = True
-                elif peak_positions:
-                    proportions = None
-                    trust_proportions = True   # the user's own positions, not a patch: default constraint weight
-                else:
-                    # Highly-overlapping peaks (e.g. SAMPLE4) make the default
-                    # greedy peak-recognition unstable; recommend_decomposition_options()
-                    # detects this via EGH peeling -- but only at the component count
-                    # IT finds on its own. Forcing more components than that (e.g. nc=3
-                    # when auto-detection only distinguishes 2) is itself the unstable
-                    # case -- SAMPLE4's 3rd component is invisible to auto-detection but
-                    # still needs proportional slicing, not the greedy default.
-                    auto_opts = self._auto_opts
-                    auto_nc = auto_opts.get('num_components', nc)
-                    needs_fallback = 'proportions' in auto_opts or nc > auto_nc
-                    proportions = [1] * nc if needs_fallback else None
-                    # This equal split is a patch for the peeling algorithm's own
-                    # shortfall, not a choice the user made -- must not silently pose
-                    # as a validated, precisely-known position. But that doesn't mean
-                    # no constraint should apply: loosen it instead of disabling it
-                    # (molass-gui#3) so gross collapse/drift is still blocked.
-                    trust_proportions = not needs_fallback
+                decomp = self._corrected.quick_decomposition(**choice.quick_kwargs())
+            except Exception as exc:
+                msg = str(exc) or type(exc).__name__
+                self._win.after(0, lambda: on_error(msg))
+                return
 
-                # on-UV checkbox only ever applies to a user-typed proportions list --
-                # not the equal-split fallback, which is already flagged untrusted below.
-                proportions_source = ('uv' if proportions is not None and custom_proportions is not None
-                                       and self._proportions_source_var.get() else None)
-                if proportions is not None:
-                    extra = {'proportions_source': proportions_source} if proportions_source else {}
-                    decomp = corrected.quick_decomposition(num_components=nc, proportions=proportions, **extra)
-                elif peak_positions:
-                    decomp = corrected.quick_decomposition(num_components=nc, xr_peakpositions=peak_positions)
-                else:
-                    decomp = corrected.quick_decomposition(num_components=nc)
-
-                def on_main():
+            def on_main():
+                try:
                     self._decomp_btn.state(["!disabled"])
-                    self._status_var.set("Used proportional decomposition" if proportions is not None
-                                          else f"Used peak positions {format_positions(peak_positions)}"
-                                          if peak_positions else "")
+                    self._status_var.set(choice.used_message())
                     self._ctx.num_components = nc
-                    self._ctx.proportions = proportions
-                    self._ctx.xr_peakpositions = peak_positions or None
-                    self._ctx.proportions_source = proportions_source
-                    self._ctx.trust_proportions = trust_proportions
-                    self._ctx.constraint_weight = None if trust_proportions else FALLBACK_LUMPING_WEIGHT
+                    self._ctx.proportions = choice.proportions
+                    self._ctx.xr_peakpositions = choice.xr_peakpositions or None
+                    self._ctx.proportions_source = choice.proportions_source
+                    self._ctx.trust_proportions = choice.trust_proportions
+                    self._ctx.constraint_weight = choice.constraint_weight
                     from molass_gui.quick_view import QuickView
                     QuickView(decomp, self._trimmed, nc, self._ctx, parent=self._win,
                               app_root=self._app_root, session_tag=self._session_tag,
                               rgcurve_queue=self._rgcurve_queue).show()
                     self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
                     self._rgcurve_go.set()  # resume the Rg curve now that QuickView is up
+                except Exception as exc:  # a Tk callback: its traceback would only reach a stderr nobody reads
+                    on_error(str(exc) or type(exc).__name__)
 
-                self._win.after(0, on_main)
-            except Exception as exc:
-                msg = str(exc)
-                def on_error(m=msg):
-                    from molass_gui.error_dialog import show_error_detail
-                    show_error_detail(self._win, self._status_var, m, title="Decomposition failed")
-                    self._decomp_btn.state(["!disabled"])
-                    self._rgcurve_go.set()  # don't leave the Rg curve stuck paused on failure
-                self._win.after(0, on_error)
+            self._win.after(0, on_main)
 
         threading.Thread(target=worker, daemon=True).start()
