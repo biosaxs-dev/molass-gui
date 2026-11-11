@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from molass.Rigorous import build_params_table
+from molass_gui import busy
 from molass_gui.dpi import geometry, px
 
 _PER_COMPONENT_SECTIONS = ('xr', 'uv')
@@ -71,13 +72,8 @@ def show_parameters_lazy(view, win, status_var, decomp, trimmed, params=None):
         Pass e.g. ``run_info.best_params`` to show the current/best values.
     """
     if getattr(view, '_score', None) is None:
-        prev = status_var.get()
-        status_var.set("Building optimizer\u2026")
-        win.update_idletasks()
-        try:
+        with busy.working(win, status_var, "Building optimizer\u2026"):
             view._score = decomp.score(trimmed_ssd=trimmed)
-        finally:
-            status_var.set(prev)
     score = view._score
     p = params if params is not None else score.init_params
     show_params_dialog(win, score.optimizer, p, title="Parameters")

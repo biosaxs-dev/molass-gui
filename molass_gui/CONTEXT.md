@@ -49,6 +49,16 @@ controls to this GUI without raising this tradeoff explicitly first.
 
 ---
 
+## One busy signal (busy.py)
+
+Every operation that takes noticeable time shows the same three things, so that a non-expert can tell that the
+program is working and not frozen: a busy **cursor** over the window (hourglass while the window itself is blocked,
+arrow with a small hourglass while a background thread works), the **status line** saying what is being done
+(`Doing something…`, back to the previous text or the result when over), and the starting **button disabled**.
+Use `busy.begin(...)` / `token.end()` around a background thread (give a `key` so that a double click is refused) and
+`with busy.working(...)` around work on the main thread. Do not set the status text or disable the button by hand for
+this. The Rigorous run keeps its own live display (progress bar during preparation, SV and job label while running).
+
 ## Sharp edges for anyone extending this GUI
 
 ### Never touch Tk/matplotlib artifacts from a background thread

@@ -8,7 +8,7 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from molass_gui import recent_folders
+from molass_gui import busy, recent_folders
 
 
 class ViewAnalysisView:
@@ -84,18 +84,12 @@ class ViewAnalysisView:
                     "prior rigorous optimization run.")
                 return
 
-        # This work is synchronous (no background thread), so the disabled
-        # state must be forced onto screen with update_idletasks() before
-        # proceeding -- otherwise Tk never gets an idle moment to repaint it
-        # until RigorousView is already up, making the click look ignored
-        # (same pattern as quick_view.py's _skip()).
-        self._btn.state(["disabled"])
-        self._status_var.set("Loading\u2026")
-        self._win.update_idletasks()
-
-        recent_folders.add(folder, kind="analysis")
-        session_tag = os.path.basename(folder.rstrip("\\/")) or folder
-        from molass_gui.rigorous_view import RigorousView
-        RigorousView.open_existing(folder, parent=self._win, app_root=self._app_root,
-                                   session_tag=session_tag).show()
-        self._win.withdraw()  # unmap, not just minimize -- keeps only RigorousView on the taskbar
+        # This work is synchronous (no background thread): the busy signal (hourglass, message,
+        # disabled button) is put on screen before the window is blocked (see busy.py).
+        with busy.working(self._win, self._status_var, "Loading\u2026", buttons=[self._btn]):
+            recent_folders.add(folder, kind="analysis")
+            session_tag = os.path.basename(folder.rstrip("\\/")) or folder
+            from molass_gui.rigorous_view import RigorousView
+            RigorousView.open_existing(folder, parent=self._win, app_root=self._app_root,
+                                       session_tag=session_tag).show()
+            self._win.withdraw()  # unmap, not just minimize -- keeps only RigorousView on the taskbar

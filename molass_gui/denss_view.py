@@ -12,20 +12,17 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 
+from molass_gui import busy
+
 
 def show_denss_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ranks=None):
     """Load the current best result's XR components and open the Run DENSS dialog."""
     from molass_gui.best_result import load_best_result
 
-    prev = status_var.get()
-    status_var.set("Loading current result\u2026")
-    win.update_idletasks()
-    try:
+    with busy.working(win, status_var, "Loading current result\u2026"):
         result = load_best_result(win, decomp, analysis_folder, rgcurve=rgcurve, xr_ranks=xr_ranks)
-        if result is None:
-            return
-    finally:
-        status_var.set(prev)
+    if result is None:
+        return
 
     components = result.get_xr_components()
     DenssDialog(win, components, analysis_folder)

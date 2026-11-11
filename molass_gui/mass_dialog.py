@@ -10,6 +10,7 @@ from tkinter import ttk
 
 from molass_gui.mass_logic import (UNAVAILABLE_MESSAGE, BUSY_MESSAGE, CAVEAT, is_available, window_title,
                                    compute_mass)
+from molass_gui import busy
 from molass_gui.dpi import geometry, px
 from molass_gui.plot_embed import embed_plot, close_dialog_figure
 
@@ -25,8 +26,9 @@ def show_mass(win, status_var, decomp, rgcurve=None, stage=None, heading=None):
     if not is_available():
         show_error_detail(win, status_var, UNAVAILABLE_MESSAGE, title="Mass unavailable")
         return
-    prev = status_var.get()
-    status_var.set(BUSY_MESSAGE)
+    token = busy.begin(win, status_var, BUSY_MESSAGE, key="mass")
+    if token is None:
+        return      # already being computed
     box = {}
 
     def worker():
@@ -42,7 +44,7 @@ def show_mass(win, status_var, decomp, rgcurve=None, stage=None, heading=None):
         if thread.is_alive():
             win.after(300, poll)
             return
-        status_var.set(prev)
+        token.end()
         if "err" in box:
             show_error_detail(win, status_var, box["err"], title="Mass failed")
             return
@@ -58,15 +60,10 @@ def show_mass_lazy(win, status_var, decomp, analysis_folder, rgcurve=None, xr_ra
     from molass_gui.best_result import load_best_result
     from molass_gui.homogeneity_dialog import _heading
 
-    prev = status_var.get()
-    status_var.set("Loading current result\u2026")
-    win.update_idletasks()
-    try:
+    with busy.working(win, status_var, "Loading current result\u2026"):
         result = load_best_result(win, decomp, analysis_folder, rgcurve=rgcurve, xr_ranks=xr_ranks)
-        if result is None:
-            return
-    finally:
-        status_var.set(prev)
+    if result is None:
+        return
     show_mass(win, status_var, result, rgcurve=rgcurve, stage="Rigorous", heading=_heading(result))
 
 

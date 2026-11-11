@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from molass_gui.continuity_logic import UNAVAILABLE_MESSAGE, BUSY_MESSAGE, is_available, window_title, report_text
+from molass_gui import busy
 from molass_gui.dpi import geometry
 from molass_gui.plot_embed import embed_plot, close_dialog_figure
 
@@ -31,8 +32,9 @@ def show_continuity(win, status_var, decomp, rgcurve=None, stage=None, heading=N
     if not is_available(decomp):
         show_error_detail(win, status_var, UNAVAILABLE_MESSAGE, title="Continuity unavailable")
         return
-    prev = status_var.get()
-    status_var.set(BUSY_MESSAGE)
+    token = busy.begin(win, status_var, BUSY_MESSAGE, key="continuity")
+    if token is None:
+        return      # already being computed
     box = {}
 
     def worker():
@@ -48,7 +50,7 @@ def show_continuity(win, status_var, decomp, rgcurve=None, stage=None, heading=N
         if thread.is_alive():
             win.after(300, poll)
             return
-        status_var.set(prev)
+        token.end()
         if "err" in box:
             show_error_detail(win, status_var, str(box["err"]), title="Continuity report failed")
             return
@@ -63,15 +65,10 @@ def show_continuity_lazy(win, status_var, decomp, analysis_folder, rgcurve=None,
     from molass_gui.best_result import load_best_result
     from molass_gui.homogeneity_dialog import _heading
 
-    prev = status_var.get()
-    status_var.set("Loading current result\u2026")
-    win.update_idletasks()
-    try:
+    with busy.working(win, status_var, "Loading current result\u2026"):
         result = load_best_result(win, decomp, analysis_folder, rgcurve=rgcurve, xr_ranks=xr_ranks)
-        if result is None:
-            return
-    finally:
-        status_var.set(prev)
+    if result is None:
+        return
     show_continuity(win, status_var, result, rgcurve=rgcurve, stage="Rigorous", heading=_heading(result))
 
 

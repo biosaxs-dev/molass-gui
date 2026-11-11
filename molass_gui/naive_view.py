@@ -7,6 +7,7 @@ import numpy as np
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 
+from molass_gui import busy
 from molass_gui.peak_selection import (parse_positions, format_positions, classify_peaks, default_selection,
                                        default_peak_positions, toggle_peak)
 from molass_gui.naive_logic import choose_decomposition, FALLBACK_LUMPING_WEIGHT  # noqa: F401 (re-exported)
@@ -74,10 +75,8 @@ class NaiveView:
         self._decomp_btn.pack(side=tk.LEFT, padx=12)
         ttk.Button(hdr, text="Export to Notebook\u2026",
                   command=self._export_to_notebook).pack(side=tk.RIGHT, padx=8)
-        self._status_var = tk.StringVar(value="Detecting components\u2026")
+        self._status_var = tk.StringVar(value="")
         ttk.Label(hdr, textvariable=self._status_var, foreground="gray").pack(side=tk.LEFT)
-        self._nc_spinbox.state(["disabled"])
-        self._decomp_btn.state(["disabled"])
 
         # Peak positions (molass-gui#14): the user's own choice of the XR peak frames, an alternative to
         # Proportions. The field works like Proportions in any mode: frames typed in it (confirmed or not) are
@@ -121,6 +120,9 @@ class NaiveView:
         self._confirmed_default = []
         canvas.mpl_connect("button_press_event", self._on_curve_click)
 
+        # busy until the detection has finished: Components and Decompose cannot be used on the stale guess meanwhile
+        self._detect_busy = busy.begin(win, self._status_var, "Detecting components\u2026",
+                                       buttons=[self._nc_spinbox, self._decomp_btn])
         threading.Thread(target=self._detect_worker, daemon=True).start()
 
     def _detect_worker(self):
@@ -172,12 +174,12 @@ class NaiveView:
                     self._corrected = corrected
                     self._rgcurve_queue = rgcurve_queue
                     self._auto_opts = {}
-                    self._status_var.set(f"Auto-detect failed ({m}) -- using manual default")
                     self._nc_var.set(3)
-                    self._nc_spinbox.state(["!disabled"])
-                    self._decomp_btn.state(["!disabled"])
+                    self._detect_busy.end(status=f"Auto-detect failed ({m}) -- using manual default")
                 else:
-                    self._status_var.set(f"Preparing the data failed ({m})")
+                    self._detect_busy.end(status=f"Preparing the data failed ({m})")
+                    self._nc_spinbox.state(["disabled"])
+                    self._decomp_btn.state(["disabled"])
             self._win.after(0, on_error)
             return
 
@@ -198,9 +200,7 @@ class NaiveView:
                 self._auto_positions = default_positions
                 note = (f"{len(default_positions)} of {len(detected)} detected peaks are also seen in UV: "
                         f"using them (Clear to undo)" + (f". {note}" if note else ""))
-            self._status_var.set(note)
-            self._nc_spinbox.state(["!disabled"])
-            self._decomp_btn.state(["!disabled"])
+            self._detect_busy.end(status=note)   # Components and Decompose are usable again
 
         self._win.after(0, on_main)
 
@@ -373,8 +373,10 @@ class NaiveView:
         nc = choice.num_components
         self._nc_var.set(nc)
 
-        self._decomp_btn.state(["disabled"])
-        self._status_var.set("Decomposing…")
+        token = busy.begin(self._win, self._status_var, "Decomposing…", buttons=[self._decomp_btn],
+                           key="decompose")
+        if token is None:
+            return
         # Pause the (possibly still-running) Rg-curve computation for this whole
         # CPU-bound window -- quick_decomposition() below and QuickView's UI build
         # in on_main are both CPU-bound too, and a background thread contending for
@@ -384,8 +386,8 @@ class NaiveView:
 
         def on_error(m):
             from molass_gui.error_dialog import show_error_detail
+            token.end()
             show_error_detail(self._win, self._status_var, m, title="Decomposition failed")
-            self._decomp_btn.state(["!disabled"])
             self._rgcurve_go.set()  # don't leave the Rg curve stuck paused on failure
 
         def worker():
@@ -400,8 +402,8 @@ class NaiveView:
 
             def on_main():
                 try:
-                    self._decomp_btn.state(["!disabled"])
-                    self._status_var.set(choice.used_message())
+                    # building the next view blocks the window: the hourglass and the message are put on screen first
+                    token.update("Opening the next view\u2026", blocking=True)
                     self._ctx.num_components = nc
                     self._ctx.proportions = choice.proportions
                     self._ctx.xr_peakpositions = choice.xr_peakpositions or None
@@ -416,6 +418,8 @@ class NaiveView:
                     self._rgcurve_go.set()  # resume the Rg curve now that QuickView is up
                 except Exception as exc:  # a Tk callback: its traceback would only reach a stderr nobody reads
                     on_error(str(exc) or type(exc).__name__)
+                else:
+                    token.end(status=choice.used_message())
 
             self._win.after(0, on_main)
 

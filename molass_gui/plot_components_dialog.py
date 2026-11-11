@@ -45,23 +45,20 @@ def show_plot_components_lazy(win, status_var, decomp, analysis_folder, rgcurve=
         back to ``decomp.xr_ranks`` when None (see ``load_rigorous_result``).
     """
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+    from molass_gui import busy
     from molass_gui.best_result import load_best_result
     from molass_gui.plot_embed import close_dialog_figure
 
-    prev = status_var.get()
-    status_var.set("Loading current result\u2026")
-    win.update_idletasks()
-    try:
+    with busy.working(win, status_var, "Loading current result\u2026"):
         # the true global best, not just the latest job, so this always matches the SV already shown
         # in the header panels; result.fv / result.sv are attached (lets export() record SV/FV)
         result = load_best_result(win, decomp, analysis_folder, rgcurve=rgcurve, xr_ranks=xr_ranks)
-        if result is None:
-            return
-    finally:
-        status_var.set(prev)
+    if result is None:
+        return
 
-    plot_result = result.plot_components(rgcurve=rgcurve, rg_cmap='YlGn',
-                                         rg_alpha_by_score=True, rg_alpha_power=2.5)
+    with busy.working(win, status_var, "Drawing the components\u2026"):
+        plot_result = result.plot_components(rgcurve=rgcurve, rg_cmap='YlGn',
+                                             rg_alpha_by_score=True, rg_alpha_power=2.5)
 
     dlg = tk.Toplevel(win)
     dlg.title("Plot Components")

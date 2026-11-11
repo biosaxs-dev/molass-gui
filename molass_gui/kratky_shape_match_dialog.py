@@ -9,6 +9,7 @@ since the dialog was last opened (e.g. after Resume produces new jobs).
 import tkinter as tk
 from tkinter import ttk
 
+from molass_gui import busy
 from molass_gui.best_result import load_best_result
 
 
@@ -30,16 +31,11 @@ def show_kratky_shape_match_lazy(win, status_var, decomp, analysis_folder, rgcur
     xr_ranks : list of int, optional
         Per-component rank override, same as show_plot_components_lazy().
     """
-    prev = status_var.get()
-    status_var.set("Loading current result\u2026")
-    win.update_idletasks()
-    try:
+    with busy.working(win, status_var, "Loading current result\u2026"):
         # the true global best, not just the latest job (see best_result.py)
         result = load_best_result(win, decomp, analysis_folder, rgcurve=rgcurve, xr_ranks=xr_ranks)
-        if result is None:
-            return
-    finally:
-        status_var.set(prev)
+    if result is None:
+        return
 
     show_kratky_shape_match_for_result(win, result)
 

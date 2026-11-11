@@ -3,7 +3,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from molass_gui import feature_flags
+from molass_gui import busy, feature_flags
 from molass_gui.model_names import model_display_name
 from molass_gui.plot_embed import embed_plot, export_component_data
 from molass_gui.rgcurve_worker import start_rgcurve_worker, attach_rgcurve_worker, rgcurve_n_frames
@@ -160,8 +160,9 @@ class QuickView:
     def _suggest_ranks(self):
         # compute_scds() is a real computation (ConcDepend/RgDiffRatios), so
         # this runs in a background thread rather than on every window open.
-        prev = self._status_var.get()
-        self._status_var.set("Computing suggested ranks\u2026")
+        token = busy.begin(self._win, self._status_var, "Computing suggested ranks\u2026", key="suggest")
+        if token is None:
+            return
 
         def worker():
             try:
@@ -169,15 +170,15 @@ class QuickView:
                 scds = self._decomp.compute_scds()
                 ranks = [scd_to_rank(s) for s in scds]
             except Exception as exc:
-                msg = str(exc)
-                self._win.after(0, lambda: self._status_var.set(f"Suggest ranks failed: {msg}"))
+                msg = str(exc) or type(exc).__name__
+                self._win.after(0, lambda: token.end(status=f"Suggest ranks failed: {msg}"))
                 return
 
             def on_main():
                 # Only fills the entry -- Apply is still the action that
                 # actually calls update_xr_ranks(); user can edit first.
                 self._ranks_var.set(",".join(str(r) for r in ranks))
-                self._status_var.set(prev)
+                token.end()
             self._win.after(0, on_main)
 
         threading.Thread(target=worker, daemon=True).start()
@@ -203,23 +204,17 @@ class QuickView:
         if len(ranks) != nc:
             self._status_var.set(f"Ranks must have {nc} value(s), got {len(ranks)}")
             return
-        # Real busy feedback (not just the transient pressed-color flash, which
-        # reverts on mouse release before rank-2's Bounded LRF fit even starts):
-        # rank-2 components re-fit synchronously here and can take a moment.
-        self._apply_btn.state(["disabled"])
-        self._apply_btn_text.set("Applying\u2026")
-        self._win.update_idletasks()
-        try:
+        # rank-2 components re-fit synchronously here and can take a moment: the busy signal (hourglass, message,
+        # disabled button) is put on screen first (see busy.py)
+        with busy.working(self._win, self._status_var, "Applying the ranks\u2026", buttons=[self._apply_btn]):
             self._decomp.update_xr_ranks(ranks)
             self._ctx.xr_ranks = ranks
             self._redraw()
-        finally:
-            self._apply_btn_text.set("Apply")
-            self._apply_btn.state(["!disabled"])
 
     def _on_rgcurve_ready(self, rgcurve):
         self._rgcurve = rgcurve
-        self._redraw()
+        with busy.working(self._win, self._status_var, "Drawing the components\u2026"):
+            self._redraw()
         self._action_btn.state(["!disabled"])
         self._params_btn.state(["!disabled"])
         self._homog_btn.state(["!disabled"])
@@ -257,19 +252,16 @@ class QuickView:
         export_component_data(self._decomp, self._win, rgcurve=self._rgcurve)
 
     def _skip(self):
-        # Unlike _upgrade(), this work is synchronous (no background thread), so
-        # the disabled state must be forced onto screen with update_idletasks()
-        # before proceeding -- otherwise Tk never gets an idle moment to repaint
-        # it until UpgradedView is already done, making the click look ignored.
-        self._action_btn.state(["disabled"])
-        self._win.update_idletasks()
-        model_info = {'model': 'egh', 'pore_dist': None, 'ln_pore_sigma': None}
-        self._ctx.model_info = model_info
-        from molass_gui.upgraded_view import UpgradedView
-        UpgradedView(self._decomp, self._trimmed, self._nc, model_info, self._ctx,
-                     rgcurve=self._rgcurve, score=self._score, parent=self._win,
-                     app_root=self._app_root, session_tag=self._session_tag).show()
-        self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
+        # Unlike _upgrade(), this work is synchronous (no background thread): the busy signal
+        # is put on screen before the window is blocked (see busy.py).
+        with busy.working(self._win, self._status_var, "Opening the next view\u2026", buttons=[self._action_btn]):
+            model_info = {'model': 'egh', 'pore_dist': None, 'ln_pore_sigma': None}
+            self._ctx.model_info = model_info
+            from molass_gui.upgraded_view import UpgradedView
+            UpgradedView(self._decomp, self._trimmed, self._nc, model_info, self._ctx,
+                         rgcurve=self._rgcurve, score=self._score, parent=self._win,
+                         app_root=self._app_root, session_tag=self._session_tag).show()
+            self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
 
     def _upgrade(self):
         model_label = self._model_var.get()
@@ -278,8 +270,15 @@ class QuickView:
             self._skip()
             return
         ln_pore_sigma = float(self._psd_sigma_var.get()) if pore_dist == 'lognormal' else None
-        self._action_btn.state(["disabled"])
-        self._status_var.set(f"Upgrading to {model_display_name(model_key)}\u2026")
+        token = busy.begin(self._win, self._status_var, f"Upgrading to {model_display_name(model_key)}\u2026",
+                           buttons=[self._action_btn], key="upgrade")
+        if token is None:
+            return
+
+        def on_error(m):
+            from molass_gui.error_dialog import show_error_detail
+            token.end()
+            show_error_detail(self._win, self._status_var, m, title="Upgrade failed")
 
         def worker():
             try:
@@ -294,23 +293,24 @@ class QuickView:
                 self._ctx.model_info = model_info
 
                 def on_main():
-                    self._action_btn.state(["!disabled"])
-                    self._status_var.set("")
-                    from molass_gui.upgraded_view import UpgradedView
-                    # score=None: model changed, so QuickView's cached score (if any)
-                    # no longer applies -- UpgradedView builds its own on first use.
-                    UpgradedView(upgraded, self._trimmed, self._nc, model_info, self._ctx,
-                                 rgcurve=self._rgcurve, score=None, parent=self._win,
-                                 app_root=self._app_root, session_tag=self._session_tag).show()
-                    self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
+                    try:
+                        # building the next view blocks the window: hourglass and message first
+                        token.update("Opening the next view\u2026", blocking=True)
+                        from molass_gui.upgraded_view import UpgradedView
+                        # score=None: model changed, so QuickView's cached score (if any)
+                        # no longer applies -- UpgradedView builds its own on first use.
+                        UpgradedView(upgraded, self._trimmed, self._nc, model_info, self._ctx,
+                                     rgcurve=self._rgcurve, score=None, parent=self._win,
+                                     app_root=self._app_root, session_tag=self._session_tag).show()
+                        self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
+                    except Exception as exc:  # a Tk callback: its traceback would only reach a stderr nobody reads
+                        on_error(str(exc) or type(exc).__name__)
+                    else:
+                        token.end(status="")
 
                 self._win.after(0, on_main)
             except Exception as exc:
-                msg = str(exc)
-                def on_error(m=msg):
-                    from molass_gui.error_dialog import show_error_detail
-                    show_error_detail(self._win, self._status_var, m, title="Upgrade failed")
-                    self._action_btn.state(["!disabled"])
-                self._win.after(0, on_error)
+                msg = str(exc) or type(exc).__name__
+                self._win.after(0, lambda: on_error(msg))
 
         threading.Thread(target=worker, daemon=True).start()

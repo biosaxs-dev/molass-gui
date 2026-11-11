@@ -14,6 +14,15 @@ class FakeWin:
         time.sleep(0.01)
         fn()
 
+    def cget(self, option):
+        return ""
+
+    def configure(self, **options):
+        pass
+
+    def update_idletasks(self):
+        pass
+
 
 class FakeVar:
     def __init__(self):

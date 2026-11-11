@@ -4,6 +4,7 @@ from tkinter import ttk
 
 from molass_gui.model_names import model_display_name
 from molass_gui.plot_embed import embed_plot, export_component_data
+from molass_gui import busy
 from molass_gui.rgcurve_worker import start_rgcurve_worker
 from molass_gui.params_dialog import show_parameters_lazy
 from molass_gui.trimming_info import fmt_fronting
@@ -186,14 +187,14 @@ class UpgradedView:
         method        = self._method_var.get().lower()
         num_jobs      = int(self._num_jobs_var.get())
 
-        # RigorousView(...).show() below runs synchronously (no background
-        # thread), so the disabled state must be forced onto screen with
-        # update_idletasks() -- otherwise Tk never gets an idle moment to
-        # repaint it until RigorousView is already done, making the click
-        # look ignored (same fix as QuickView._skip()).
-        self._rig_btn.state(["disabled"])
-        self._win.update_idletasks()
+        # RigorousView(...).show() below runs synchronously (no background thread): the busy signal
+        # (hourglass, message, disabled button) is put on screen before the window is blocked.
+        with busy.working(self._win, self._status_var, "Opening the optimization view\u2026",
+                          buttons=[self._rig_btn]):
+            self._open_rigorous(folder, model_key, pore_dist, ln_pore_sigma, method, num_jobs)
+        self._rig_btn.state(["disabled"])    # one run per view, as before
 
+    def _open_rigorous(self, folder, model_key, pore_dist, ln_pore_sigma, method, num_jobs):
         decomp_params = {}
         if getattr(self._ctx, 'proportions', None):
             # Mirrors NaiveView's decomposition choice (custom or auto-detected) so the

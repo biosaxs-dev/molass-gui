@@ -110,3 +110,32 @@ def test_masses_of_a_simulated_decomposition(monkeypatch):
     assert error is None and len(rows) == 2
     assert all(r[2] != "n/a" for r in rows)
     assert len(curve.frames) > 0 and np.isfinite(curve.mass).all()
+
+
+def test_a_second_click_while_the_masses_are_computed_does_nothing(root, monkeypatch):
+    """The button is not disabled, so the guard is the busy key: one computation, one dialog."""
+    import threading
+    import time
+    from molass_gui import mass_dialog
+    win = tk.Toplevel(root)
+    status = tk.StringVar(master=win, value="")
+    release, calls = threading.Event(), []
+
+    def slow(decomp, rgcurve=None):
+        calls.append(1)
+        release.wait(5)
+        return [(1, "30.0", "100", "")], None, "no curve in this test"
+
+    monkeypatch.setattr(mass_dialog, "compute_mass", slow)
+    monkeypatch.setattr(mass_dialog, "is_available", lambda: True)
+    mass_dialog.show_mass(win, status, SimpleNamespace(), stage="Quick")
+    mass_dialog.show_mass(win, status, SimpleNamespace(), stage="Quick")      # the double click
+    assert status.get() == mass_logic.BUSY_MESSAGE and str(win.cget("cursor")) != ""
+    release.set()
+    end = time.time() + 10
+    while time.time() < end and not [w for w in win.winfo_children() if isinstance(w, tk.Toplevel)]:
+        root.update()
+        time.sleep(0.02)
+    dialogs = [w for w in win.winfo_children() if isinstance(w, tk.Toplevel)]
+    assert len(calls) == 1 and len(dialogs) == 1
+    assert status.get() == "" and str(win.cget("cursor")) == ""

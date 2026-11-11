@@ -4,7 +4,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from molass_gui import feature_flags, recent_folders
+from molass_gui import busy, feature_flags, recent_folders
 from molass_gui.dpi import px
 from molass_gui.session_context import to_dropbox_path
 from molass_gui.trimming_info import SMALL_ANGLE_LIMITS, small_angle_limit_from_label, trim_kwargs
@@ -200,8 +200,9 @@ class App:
 
         small_angle_limit = small_angle_limit_from_label(self._small_angle_var.get())
 
-        self._btn.state(["disabled"])
-        self._status_var.set("Loading…")
+        token = busy.begin(self._win, self._status_var, "Loading…", buttons=[self._btn])
+        if token is None:
+            return
 
         def worker():
             actual_folder = folder
@@ -236,30 +237,33 @@ class App:
                 trimmed = ssd.trimmed_copy(**trim_kwargs(small_angle_limit))
 
                 def on_main():
-                    self._btn.state(["!disabled"])
-                    # force a repaint now -- plot_compact() below blocks the mainloop,
-                    # so a plain .set() would never actually appear on screen first
-                    self._status_var.set("Preparing the compact plot…")
-                    self._win.update_idletasks()
-                    recent_folders.add(folder)
-                    session_tag = os.path.basename(folder.rstrip("\\/")) or folder
-                    from molass_gui.session_context import SessionContext
-                    ctx = SessionContext(folder)
-                    ctx.uv_pickat = uv_pickat
-                    ctx.small_angle_limit = small_angle_limit
-                    from molass_gui.naive_view import NaiveView
-                    NaiveView(ssd, trimmed, ctx, parent=self._win, app_root=self._app_root,
-                              session_tag=session_tag).show()
-                    self._win.withdraw()  # unmap, not just minimize -- keeps only NaiveView on the taskbar
+                    try:
+                        # plot_compact() below blocks the mainloop: the hourglass and the message are put on screen first
+                        token.update("Preparing the compact plot…", blocking=True)
+                        recent_folders.add(folder)
+                        session_tag = os.path.basename(folder.rstrip("\\/")) or folder
+                        from molass_gui.session_context import SessionContext
+                        ctx = SessionContext(folder)
+                        ctx.uv_pickat = uv_pickat
+                        ctx.small_angle_limit = small_angle_limit
+                        from molass_gui.naive_view import NaiveView
+                        NaiveView(ssd, trimmed, ctx, parent=self._win, app_root=self._app_root,
+                                  session_tag=session_tag).show()
+                        self._win.withdraw()  # unmap, not just minimize -- keeps only NaiveView on the taskbar
+                    except Exception as exc:
+                        on_error(str(exc))
+                    else:
+                        token.end(status="")
 
                 self._win.after(0, on_main)
 
             except Exception as exc:
                 msg = str(exc)
-                def on_error(m=msg):
-                    from molass_gui.error_dialog import show_error_detail
-                    show_error_detail(self._win, self._status_var, m, title="Load failed")
-                    self._btn.state(["!disabled"])
-                self._win.after(0, on_error)
+                self._win.after(0, lambda m=msg: on_error(m))
+
+        def on_error(m):
+            from molass_gui.error_dialog import show_error_detail
+            token.end()
+            show_error_detail(self._win, self._status_var, m, title="Load failed")
 
         threading.Thread(target=worker, daemon=True).start()

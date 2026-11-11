@@ -24,6 +24,7 @@ yield this thread for exactly that window, then let it resume.
 import queue
 import threading
 
+from molass_gui import busy
 
 def rgcurve_n_frames(obj):
     """Number of XR frames for *obj* -- a corrected SecSaxsData or a Decomposition."""
@@ -77,15 +78,14 @@ def start_rgcurve_computation(obj, go_event=None):
 def attach_rgcurve_worker(win, q, n_frames, status_var, on_done, progress_cb=None):
     """Attach Tk-side polling to a queue from start_rgcurve_computation().
 
-    Updates *status_var* (if not None) with a "Rg: j/n" progress message while
-    running, clears it on completion. Also calls *progress_cb(j, n_frames)*
+    Shows a "Computing the Rg curve... j/n" busy message in *status_var* (if not None) while
+    running (see busy.py), clears it on completion. Also calls *progress_cb(j, n_frames)*
     (if given) on the Tk main thread each tick -- for callers rendering
     progress some other way (e.g. RigorousView's ttk.Progressbar). Calls
     on_done(rgcurve) on the Tk main thread when finished. On failure, leaves
     an error message in *status_var* (if not None) and does not call on_done.
     """
-    if status_var is not None:
-        status_var.set(f"Rg: 0/{n_frames}")
+    token = busy.begin(win, status_var, f"Computing the Rg curve\u2026 0/{n_frames}") if status_var is not None else None
 
     def poll():
         while True:
@@ -94,18 +94,18 @@ def attach_rgcurve_worker(win, q, n_frames, status_var, on_done, progress_cb=Non
             except queue.Empty:
                 break
             if kind == 'progress':
-                if status_var is not None:
-                    status_var.set(f"Rg: {payload}/{n_frames}")
+                if token is not None:
+                    token.update(f"Computing the Rg curve\u2026 {payload}/{n_frames}")
                 if progress_cb is not None:
                     progress_cb(payload, n_frames)
             elif kind == 'done':
-                if status_var is not None:
-                    status_var.set("")
+                if token is not None:
+                    token.end(status="")
                 on_done(payload)
                 return
             elif kind == 'error':
-                if status_var is not None:
-                    status_var.set(f"Rg error: {payload}")
+                if token is not None:
+                    token.end(status=f"Rg curve failed: {payload}")
                 return
         win.after(100, poll)
 

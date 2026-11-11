@@ -158,6 +158,41 @@ def test_typed_proportions_replace_the_default_peaks(root):
     assert corrected.calls == [{"num_components": 2, "proportions": [1.0, 2.0]}]
 
 
+def _busy_cursor(widget):
+    return str(widget.cget("cursor")) != ""
+
+
+def test_detection_and_decompose_show_the_one_busy_signal(root):
+    corrected = FakeCorrected(AUTO)
+    view = NaiveView(SimpleNamespace(), FakeTrimmed(corrected), SimpleNamespace(), parent=root,
+                     app_root=SimpleNamespace(close_session=lambda: None))
+    seen = {}
+
+    def show_and_look():
+        view.show()
+        seen["detect"] = (view._status_var.get(), _busy_cursor(view._win), view._decomp_btn.instate(["disabled"]))
+
+    run_loop(root, lambda: enabled(view._decomp_btn), first=show_and_look)
+    assert seen["detect"] == ("Detecting components\u2026", True, True)
+    assert not _busy_cursor(view._win)                                # over: the cursor is back
+
+    def decompose_and_look():
+        view._decompose()
+        seen["decompose"] = (view._status_var.get(), _busy_cursor(view._win), view._decomp_btn.instate(["disabled"]))
+
+    run_loop(root, lambda: "stop here" in view._status_var.get(), first=decompose_and_look)
+    assert seen["decompose"] == ("Decomposing\u2026", True, True)
+    assert not _busy_cursor(view._win) and enabled(view._decomp_btn)    # the failure ended the busy state too
+
+
+def test_a_failed_detection_ends_the_busy_state(root, monkeypatch):
+    def boom(*_args):
+        raise ValueError("boom")
+    monkeypatch.setattr(naive_view, "classify_peaks", boom)
+    view = open_view(root, FakeCorrected(AUTO))
+    assert not _busy_cursor(view._win)
+
+
 def test_a_failure_after_the_detection_is_shown_and_leaves_the_manual_default(root, monkeypatch):
     def boom(*_args):
         raise ValueError("boom")

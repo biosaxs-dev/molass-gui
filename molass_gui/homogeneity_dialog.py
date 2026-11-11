@@ -11,6 +11,7 @@ from tkinter import ttk
 from molass_gui.homogeneity_logic import (PRESETS, default_proxy_names, normalize_proxy_name, preset_pairs,
                                           pairs_from_matrix, parse_cores, format_cores, window_title,
                                           figure_title)
+from molass_gui import busy
 from molass_gui.dpi import geometry, px
 from molass_gui.plot_embed import embed_plot, close_dialog_figure
 
@@ -29,8 +30,9 @@ def _with_i0(win, status_var, ssd, rgcurve, then):
         then(rgcurve)
         return
     from molass.Homogeneity import ensure_i0_rgcurve
-    prev = status_var.get()
-    status_var.set("Computing I(0) from Guinier fits (about 30 s)\u2026")
+    token = busy.begin(win, status_var, "Computing I(0) from Guinier fits (about 30 s)\u2026", key="homogeneity")
+    if token is None:
+        return      # already being computed
     box = {}
 
     def worker():
@@ -46,7 +48,7 @@ def _with_i0(win, status_var, ssd, rgcurve, then):
         if thread.is_alive():
             win.after(300, poll)
             return
-        status_var.set(prev)
+        token.end()
         if "err" in box:
             from molass_gui.error_dialog import show_error_detail
             show_error_detail(win, status_var, str(box["err"]), title="Homogeneity failed")
@@ -63,13 +65,8 @@ def show_homogeneity(win, status_var, ssd, rgcurve, optimized_mapping=None, stag
     optimized UV curves next to the estimated one. ``stage`` (window title) and ``heading`` (the
     ``dataset | model | method`` line, e.g. ``make_auto_title(decomp)``) tell the figure's stage."""
     def open_dialog(rg):
-        prev = status_var.get()
-        status_var.set("Computing homogeneity\u2026")
-        win.update_idletasks()
-        try:
+        with busy.working(win, status_var, "Computing homogeneity\u2026"):
             first = ssd.homogeneity(rgcurve=rg)
-        finally:
-            status_var.set(prev)
         HomogeneityDialog(win, ssd, rg, first, optimized_mapping=optimized_mapping, stage=stage, heading=heading)
 
     _with_i0(win, status_var, ssd, rgcurve, open_dialog)
@@ -83,17 +80,12 @@ def show_homogeneity_lazy(win, status_var, decomp, analysis_folder, rgcurve=None
     """
     from molass_gui.best_result import load_best_result
 
-    prev = status_var.get()
-    status_var.set("Loading current result\u2026")
-    win.update_idletasks()
-    try:
+    with busy.working(win, status_var, "Loading current result\u2026"):
         result = load_best_result(win, decomp, analysis_folder, rgcurve=rgcurve, xr_ranks=xr_ranks)
         if result is None:
             return
         ssd = decomp.ssd
         optimized = result.get_uv_mapping() if ssd.uv is not None else None
-    finally:
-        status_var.set(prev)
 
     def open_dialog(rg):
         first = ssd.homogeneity(rgcurve=rg)
