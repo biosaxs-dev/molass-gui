@@ -12,18 +12,21 @@ from molass_gui.naive_view import NaiveView
 
 
 class FakeCorrected:
-    def __init__(self, auto_opts):
+    def __init__(self, auto_opts, confirmed=(), confirmed_opts=None):
         self.auto_opts = auto_opts
+        self.confirmed = list(confirmed)      # the detected positions the XR/UV mapping also sees
+        self.confirmed_opts = confirmed_opts
         self.calls = []
 
     def get_rg_curve(self, progress_cb=None):
         return "rgcurve"
 
-    def recommend_decomposition_options(self):
-        return self.auto_opts
+    def recommend_decomposition_options(self, confirm_with_uv=False):
+        return self.confirmed_opts if confirm_with_uv and self.confirmed_opts else self.auto_opts
 
-    def estimate_mapping(self):
-        return SimpleNamespace(xr_peaks=[83])
+    def get_confirmed_peaks(self):
+        positions = [int(p) for p in self.auto_opts.get('xr_peakpositions', [])]
+        return SimpleNamespace(positions=positions, confirmed=[p in self.confirmed for p in positions])
 
     def quick_decomposition(self, **kwargs):
         self.calls.append(kwargs)
@@ -91,10 +94,36 @@ AUTO = {"num_components": 2, "xr_peakpositions": np.array([84, 117])}
 
 
 def test_detection_fills_in_the_view(root):
-    view = open_view(root, FakeCorrected(AUTO))
+    view = open_view(root, FakeCorrected(AUTO, confirmed=[84]))
     assert view._nc_var.get() == 2
     assert view._candidates == [(84, True), (117, False)]
     assert enabled(view._peak_btn)
+    assert view._peaks_var.get() == ""      # the library left no peak out: the plain default
+
+
+# five detected peaks, three of them also seen in UV (the situation of PROTEINS5: 5 of 7)
+SEVEN = {"num_components": 5, "xr_peakpositions": np.array([10, 40, 84, 117, 190])}
+THREE = {"num_components": 3, "xr_peakpositions": np.array([40, 84, 117])}
+
+
+def test_confirmed_peaks_are_the_default_when_the_mapping_rules_the_others_out(root):
+    corrected = FakeCorrected(SEVEN, confirmed=[40, 84, 117], confirmed_opts=THREE)
+    view = open_view(root, corrected)
+    assert view._peaks_var.get() == "40, 84, 117" and view._nc_var.get() == 3
+    assert "3 of 5 detected peaks" in view._status_var.get()
+    view._decompose()
+    run_loop(root, lambda: corrected.calls and "stop here" in view._status_var.get())
+    assert corrected.calls == [{"num_components": 3, "xr_peakpositions": [40, 84, 117]}]
+
+
+def test_the_default_peaks_give_way_to_components_and_to_clear(root):
+    view = open_view(root, FakeCorrected(SEVEN, confirmed=[40, 84, 117], confirmed_opts=THREE))
+    view._nc_var.set(4)                      # the user wants something else: the default positions must not override it
+    assert view._peaks_var.get() == "" and view._auto_positions is None
+    view._nc_var.set(3)
+    view._peaks_var.set("40, 84, 117")
+    view._clear_peak_selection()
+    assert view._peaks_var.get() == "" and view._nc_var.get() == 5     # back to the plain default
 
 
 def test_a_failure_after_the_detection_is_shown_and_leaves_the_manual_default(root, monkeypatch):

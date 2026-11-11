@@ -26,7 +26,7 @@ at a time, with live plots at each step.
 |---|---|---|
 | 0 Launcher | `launcher.py` | Choose **New Analysis** or **Open Existing Analysis** |
 | 1 Setup | `app.py` | Enter/pick the data folder |
-| 2 Naive View | `naive_view.py` | `plot_compact` with baseline; components spinbox pre-filled via `recommend_decomposition_options()`; **Decompose** |
+| 2 Naive View | `naive_view.py` | `plot_compact` with baseline; components spinbox pre-filled via `recommend_decomposition_options()`; when the XR/UV mapping rests on >= 3 peaks and rules some detected peaks out (PROTEINS5: 5 of 7), the Peak positions field is pre-filled with the confirmed ones (`recommend_decomposition_options(confirm_with_uv=True)`, needs a molass release with molass-library#382); **Decompose** |
 | 3 Quick Optimization View | `quick_view.py` | Review EGH decomposition; pick a column model; **Upgrade** or **Skip** |
 | 4 Upgraded View | `upgraded_view.py` | Review upgraded decomposition; pick method (BH/DE) and subprocess option; **Rigorous Optimization…** |
 | 5 Rigorous Optimization View | `rigorous_view.py` | 5-panel live monitor (UV/XR/Score/SV-history/Rg-history); auto-starts; **Terminate**/**Resume** |

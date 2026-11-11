@@ -4,7 +4,6 @@ so that it can be tested."""
 import numpy as np
 
 SNAP_FRAMES = 8          # a click this close (in frames) to a chosen peak removes it; otherwise it snaps to the local maximum
-CONFIRM_TOL_FRAMES = 10  # a detected peak counts as confirmed if the XR/UV mapping has a peak this close
 
 
 def parse_positions(text, frames=None):
@@ -35,22 +34,33 @@ def format_positions(positions):
     return ", ".join(str(int(p)) for p in positions)
 
 
-def classify_peaks(detected, confirmed, tol=CONFIRM_TOL_FRAMES):
-    """``[(frame, is_confirmed), ...]`` of the detected peaks, sorted; a detected peak is confirmed when one
-    of ``confirmed`` (the XR peaks of the XR/UV mapping) lies within ``tol`` frames."""
-    confirmed = [int(c) for c in (confirmed if confirmed is not None else [])]
-    out = []
-    for d in sorted(int(p) for p in detected):
-        out.append((d, any(abs(d - c) <= tol for c in confirmed)))
-    return out
+def classify_peaks(positions, confirmed):
+    """``[(frame, is_confirmed), ...]`` of the detected peaks, sorted. ``confirmed`` are the flags of molass's
+    ``corrected.get_confirmed_peaks()`` for ``positions``, or ``None`` when they are not available (every peak
+    then counts as unconfirmed)."""
+    flags = [False] * len(positions) if confirmed is None else [bool(c) for c in confirmed]
+    return sorted((int(p), c) for p, c in zip(positions, flags))
 
 
-def default_selection(detected, confirmed, tol=CONFIRM_TOL_FRAMES):
-    """The peaks "Use detected peaks" fills in: the confirmed ones, or all detected ones when none is confirmed
+def default_selection(candidates):
+    """The peaks "Show confirmed peaks" fills in: the confirmed ones, or all detected ones when none is confirmed
     (no UV data, or no mapping)."""
-    classified = classify_peaks(detected, confirmed, tol)
-    sure = [d for d, ok in classified if ok]
-    return sure if sure else [d for d, _ in classified]
+    sure = [d for d, ok in candidates if ok]
+    return sure if sure else [d for d, _ in candidates]
+
+
+def default_peak_positions(auto_opts, confirmed_opts):
+    """The peak positions Decompose starts with, or ``[]`` for the default decomposition.
+
+    ``auto_opts`` is ``recommend_decomposition_options()`` and ``confirmed_opts`` the same with
+    ``confirm_with_uv=True``: the latter has fewer peaks only when the XR/UV mapping rests on enough peaks to
+    show that the others are spurious (PROTEINS5: 5 of 7). Otherwise the default stays as it is."""
+    if 'xr_peakpositions' not in confirmed_opts or 'xr_peakpositions' not in auto_opts:
+        return []
+    chosen = sorted(int(p) for p in confirmed_opts['xr_peakpositions'])
+    if len(chosen) >= len(auto_opts['xr_peakpositions']):
+        return []
+    return chosen
 
 
 def toggle_peak(selected, clicked, x, y, snap=SNAP_FRAMES, candidates=()):

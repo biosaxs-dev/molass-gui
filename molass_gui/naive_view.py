@@ -8,7 +8,7 @@ from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 
 from molass_gui.peak_selection import (parse_positions, format_positions, classify_peaks, default_selection,
-                                       toggle_peak)
+                                       default_peak_positions, toggle_peak)
 from molass_gui.naive_logic import choose_decomposition, FALLBACK_LUMPING_WEIGHT  # noqa: F401 (re-exported)
 from molass_gui.trimming_info import fmt_qrange, fmt_interparticle_hint
 
@@ -56,6 +56,7 @@ class NaiveView:
         # Placeholder until _detect_worker fills in the recommended value below --
         # disabled in the meantime so a user can't decompose against the stale guess.
         self._nc_var = tk.IntVar(value=1)
+        self._nc_var.trace_add("write", self._on_components_changed)
         self._nc_spinbox = ttk.Spinbox(hdr, from_=1, to=10, textvariable=self._nc_var, width=5)
         self._nc_spinbox.pack(side=tk.LEFT, padx=6)
         ttk.Label(hdr, text="Proportions (optional):").pack(side=tk.LEFT, padx=(12, 0))
@@ -84,6 +85,7 @@ class NaiveView:
         # display: off (the initial one, no peak marks, as before this feature) and on (marks shown, clicking
         # the curve adds/removes a peak, "Redraw positions" redraws the lines of the field's frames).
         self._peak_mode = False
+        self._auto_positions = None    # the default peaks put in the field by the detection, while they are unchanged
         hdr2 = ttk.Frame(win, padding=(8, 0))
         hdr2.pack(fill=tk.X)
         ttk.Label(hdr2, text="Peak positions (optional):").pack(side=tk.LEFT)
@@ -142,15 +144,25 @@ class NaiveView:
             rgcurve_queue = start_rgcurve_computation(corrected, go_event=self._rgcurve_go)
             auto_opts = corrected.recommend_decomposition_options()
 
-            # The peaks the XR/UV mapping confirms, to tell them from the merely detected ones in the plot.
-            # Optional: without it (e.g. no UV data) every detected peak is shown as unconfirmed.
-            try:
-                confirmed = [int(p) for p in corrected.estimate_mapping().xr_peaks]
-            except Exception:
-                confirmed = None
+            # Which detected peaks the XR/UV mapping also sees (molass-library#382), to tell them from the merely
+            # detected ones in the plot. Optional: without it (e.g. no UV data) every detected peak is unconfirmed.
             detected = [int(p) for p in auto_opts.get('xr_peakpositions', [])]   # an ndarray: no `or []`
-            candidates = classify_peaks(detected, confirmed)
-            confirmed_default = default_selection(detected, confirmed)
+            try:
+                confirmation = corrected.get_confirmed_peaks()
+                same = [int(p) for p in confirmation.positions] == detected
+                flags = confirmation.confirmed if same else None
+            except Exception:
+                flags = None
+            candidates = classify_peaks(detected, flags)
+            confirmed_default = default_selection(candidates)
+            # Peaks the XR/UV mapping shows to be the real ones (PROTEINS5: 5 of 7) are what Decompose starts with
+            default_positions = []
+            if detected:
+                try:
+                    default_positions = default_peak_positions(
+                        auto_opts, corrected.recommend_decomposition_options(confirm_with_uv=True))
+                except Exception:
+                    pass
         except Exception as exc:
             msg = str(exc) or type(exc).__name__
             def on_error(m=msg):
@@ -179,7 +191,14 @@ class NaiveView:
             if self._confirmed_default:
                 self._peak_btn.state(["!disabled"])
             # shown in the status label: the rank-2 (interparticle) case is rare
-            self._status_var.set(fmt_interparticle_hint(auto_opts))
+            note = fmt_interparticle_hint(auto_opts)
+            if default_positions:
+                # visible and editable in the Peak positions field; Clear goes back to the plain default
+                self._peaks_var.set(format_positions(default_positions))
+                self._auto_positions = default_positions
+                note = (f"{len(default_positions)} of {len(detected)} detected peaks are also seen in UV: "
+                        f"using them (Clear to undo)" + (f". {note}" if note else ""))
+            self._status_var.set(note)
             self._nc_spinbox.state(["!disabled"])
             self._decomp_btn.state(["!disabled"])
 
@@ -207,6 +226,21 @@ class NaiveView:
         positions = self._current_positions()
         if positions:
             self._nc_var.set(len(positions))
+        if self._auto_positions is not None and positions != self._auto_positions:
+            self._auto_positions = None    # the user's own choice now
+
+    def _on_components_changed(self, *_args):
+        # Components set away from the number of default peaks: the user wants something else, so the default
+        # positions must not silently override it (a typed field is left alone, as for Proportions).
+        try:
+            nc = self._nc_var.get()
+        except tk.TclError:
+            return      # mid-edit
+        if self._auto_positions is not None and nc != len(self._auto_positions):
+            self._auto_positions = None
+            self._peaks_var.set("")
+            self._clear_error()
+            self._redraw_peak_markers()
 
     def _start_peak_selection(self):
         """Off -> on: show the peak marks; the confirmed peaks are pre-selected unless the field already has frames."""
@@ -235,10 +269,14 @@ class NaiveView:
         """Clear the field and go back to the initial state, with no peak marks."""
         self._peak_mode = False
         self._peaks_var.set("")
+        if self._auto_opts:
+            self._nc_var.set(self._auto_opts.get('num_components', self._nc_var.get()))   # the plain default again
         self._peak_btn.configure(text="Show confirmed peaks", command=self._start_peak_selection)
         if self._confirmed_default:
             self._peak_btn.state(["!disabled"])
         self._peak_hint_var.set("")
+        if "also seen in UV" in self._status_var.get():
+            self._status_var.set(fmt_interparticle_hint(self._auto_opts))
         self._clear_error()
         self._redraw_peak_markers()
 

@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from molass_gui.peak_selection import (parse_positions, format_positions, classify_peaks, default_selection,
-                                       toggle_peak)
+                                       default_peak_positions, toggle_peak)
 
 
 def test_parse_and_format_positions():
@@ -22,13 +22,22 @@ def test_parse_positions_errors(text, message):
 
 def test_classify_and_default_selection_on_the_proteins5_numbers():
     detected = [500, 562, 648, 758, 827, 871, 1103]
-    mapping_peaks = [561, 648, 760, 825, 878]
-    classified = classify_peaks(detected, mapping_peaks)
-    assert [d for d, ok in classified if ok] == [562, 648, 758, 827, 871]
-    assert [d for d, ok in classified if not ok] == [500, 1103]
-    assert default_selection(detected, mapping_peaks) == [562, 648, 758, 827, 871]
-    assert default_selection(detected, None) == sorted(detected)            # no mapping: all detected peaks
-    assert default_selection(detected, [9999]) == sorted(detected)          # nothing confirmed: all detected peaks
+    flags = [False, True, True, True, True, True, False]    # molass's get_confirmed_peaks().confirmed
+    candidates = classify_peaks(detected, flags)
+    assert [d for d, ok in candidates if ok] == [562, 648, 758, 827, 871]
+    assert [d for d, ok in candidates if not ok] == [500, 1103]
+    assert default_selection(candidates) == [562, 648, 758, 827, 871]
+    assert default_selection(classify_peaks(detected, None)) == detected     # no confirmation: all detected peaks
+    assert default_selection(classify_peaks(detected, [False]*7)) == detected   # nothing confirmed: all detected peaks
+
+
+def test_default_peak_positions_only_when_the_library_leaves_peaks_out():
+    detected = {'num_components': 7, 'xr_peakpositions': np.array([500, 562, 648, 758, 827, 871, 1103])}
+    confirmed = {'num_components': 5, 'xr_peakpositions': np.array([562, 648, 758, 827, 871])}
+    assert default_peak_positions(detected, confirmed) == [562, 648, 758, 827, 871]
+    assert default_peak_positions(detected, detected) == []                  # the mapping did not rule peaks out
+    proportions = {'num_components': 3, 'proportions': [1, 1, 1]}
+    assert default_peak_positions(proportions, proportions) == []           # overlapping peaks: the fallback stays
 
 
 def test_toggle_peak_adds_the_local_maximum_and_removes_a_chosen_peak():
