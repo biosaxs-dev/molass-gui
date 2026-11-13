@@ -88,6 +88,9 @@ def attach_rgcurve_worker(win, q, n_frames, status_var, on_done, progress_cb=Non
     token = busy.begin(win, status_var, f"Computing the Rg curve\u2026 0/{n_frames}") if status_var is not None else None
 
     def poll():
+        # the view was left by its Back button: stop, and leave the queue to the next view of this decomposition
+        if not win.winfo_exists():
+            return
         while True:
             try:
                 kind, payload = q.get_nowait()

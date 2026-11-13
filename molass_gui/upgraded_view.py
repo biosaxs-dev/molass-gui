@@ -17,7 +17,7 @@ _NUM_JOBS_DEFAULT = 10
 
 class UpgradedView:
     def __init__(self, decomp, trimmed, nc, model_info, ctx, parent=None, app_root=None,
-                 session_tag=None, rgcurve=None, score=None):
+                 session_tag=None, rgcurve=None, score=None, back=None):
         """
         Parameters
         ----------
@@ -43,6 +43,8 @@ class UpgradedView:
             Already-built Score (from QuickView's Skip path, same decomp), if any --
             reused for "Show Parameters" instead of rebuilding. None on the Upgrade
             path, since the model (and thus the optimizer) has changed.
+        back : callable or None
+            Shows the Quick Optimization View again (the "Quick View" button); called after this view is closed.
         """
         self._decomp = decomp
         self._trimmed = trimmed
@@ -54,6 +56,7 @@ class UpgradedView:
         self._session_tag = session_tag
         self._rgcurve = rgcurve
         self._score = score
+        self._back = back
         self._plot_state = None
 
     def show(self):
@@ -69,6 +72,8 @@ class UpgradedView:
         hdr = ttk.Frame(win, padding=(8, 4))
         hdr.pack(fill=tk.X)
 
+        self._back_btn = ttk.Button(hdr, text="\u2190 Quick View", command=self._go_back)
+        self._back_btn.pack(side=tk.LEFT, padx=(0, 12))
         ttk.Label(hdr, text="Method:").pack(side=tk.LEFT)
         self._method_var = tk.StringVar(value='BH')
         ttk.Combobox(hdr, textvariable=self._method_var, values=_METHOD_LABELS,
@@ -126,6 +131,12 @@ class UpgradedView:
 
         if self._rgcurve is None:
             start_rgcurve_worker(win, self._decomp, self._rg_var, self._on_rgcurve_ready)
+
+    def _go_back(self):
+        """Leave this view for the Quick Optimization View, to choose the model again."""
+        from molass_gui.plot_embed import close_view
+        close_view(self._win, self._plot_state)
+        self._back()
 
     def _on_rgcurve_ready(self, rgcurve):
         self._rgcurve = rgcurve
@@ -193,6 +204,7 @@ class UpgradedView:
                           buttons=[self._rig_btn]):
             self._open_rigorous(folder, model_key, pore_dist, ln_pore_sigma, method, num_jobs)
         self._rig_btn.state(["disabled"])    # one run per view, as before
+        self._back_btn.state(["disabled"])   # the run is a child window of this view: leaving would stop it
 
     def _open_rigorous(self, folder, model_key, pore_dist, ln_pore_sigma, method, num_jobs):
         decomp_params = {}

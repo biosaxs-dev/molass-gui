@@ -80,6 +80,11 @@ To use one of Molass's physics-based column models instead (the actual
 example **EGH → SDM (mono)**. The button in the top-right corner changes
 from **Skip** to **Upgrade**. Click it.
 
+Not happy with the decomposition? **← Naive View** (top left) takes you back
+to the previous window with your entries unchanged — change the number of
+components, the proportions or the peak positions and click **Decompose**
+again.
+
 ## 4. Upgraded View: a physically-constrained fit
 
 ![Upgraded View showing the SDM-model decomposition, Method/Jobs controls, and Rigorous Optimization button](images/04-upgraded-view.png)
@@ -92,7 +97,9 @@ than an unconstrained empirical curve.
 Pick an optimization **Method** (BH = Basin-Hopping, DE = Differential
 Evolution — BH is a reasonable default), leave **Jobs** at its default, and
 click **Rigorous Optimization…**. You'll be asked to choose an output
-folder for the results — pick anywhere you like.
+folder for the results — pick anywhere you like. To try another model first,
+use **← Quick View** (top left); once the optimization has started there is
+no way back.
 
 ## 5. Rigorous Optimization View: watch it refine
 

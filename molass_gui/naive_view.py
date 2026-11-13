@@ -30,6 +30,9 @@ class NaiveView:
         # self._corrected exists -- forwarded to QuickView so it attaches to this
         # already-running computation instead of starting its own, later one.
         self._rgcurve_queue = None
+        # The finished Rg curve, once a QuickView has seen it and the user came back here: the next QuickView
+        # gets it directly (the queue's 'done' message has been consumed by then).
+        self._rgcurve = None
         # threading.Event.wait() blocks while *clear* and returns immediately while
         # *set* -- so this is a "go ahead" flag: set (the default) means the Rg-curve
         # background computation may proceed; _decompose() clears it to pause that
@@ -206,6 +209,15 @@ class NaiveView:
             self._detect_busy.end(status=note)   # Components and Decompose are usable again
 
         self._win.after(0, on_main)
+
+    def _show_again(self, rgcurve=None):
+        """The Quick Optimization View was left by its Back button: this view is up as it was left (components,
+        proportions, peak positions), ready to Decompose again."""
+        if rgcurve is not None:
+            self._rgcurve = rgcurve
+        self._ctx.forget_decomposition()
+        self._win.deiconify()
+        self._status_var.set("")
 
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
@@ -419,7 +431,8 @@ class NaiveView:
                     from molass_gui.quick_view import QuickView
                     QuickView(decomp, self._trimmed, nc, self._ctx, parent=self._win,
                               app_root=self._app_root, session_tag=self._session_tag,
-                              rgcurve_queue=self._rgcurve_queue, found_notices=found).show()
+                              rgcurve_queue=self._rgcurve_queue, found_notices=found,
+                              rgcurve=self._rgcurve, back=self._show_again).show()
                     self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
                     self._rgcurve_go.set()  # resume the Rg curve now that QuickView is up
                 except Exception as exc:  # a Tk callback: its traceback would only reach a stderr nobody reads

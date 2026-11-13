@@ -80,8 +80,10 @@ class SessionContext:
     """Accumulates GUI choices as the session progresses.
 
     Views mutate the fields they're responsible for, then pass the same
-    instance forward to the next view. No copying is needed: each phase
-    strictly adds fields and never revisits an earlier one (no Back button).
+    instance forward to the next view. No copying is needed: the phases add
+    fields in turn, and a view left by its Back button undoes its own
+    (forget_decomposition(), QuickView._show_again()), so the context always
+    describes exactly what is on screen.
     """
 
     def __init__(self, folder):
@@ -100,6 +102,17 @@ class SessionContext:
         self.num_jobs = None  # successive reseeded jobs (molass-researcher experiment 36)
         self.xr_ranks = None  # set via QuickView's Ranks entry (Decomposition.update_xr_ranks)
 
+    def forget_decomposition(self):
+        """The Quick Optimization View was left for the Naive View: what the decomposition and the views after
+        it contributed is no longer true (a failed or cancelled new Decompose must not export the old one)."""
+        self.num_components = None
+        self.proportions = None
+        self.xr_peakpositions = None
+        self.proportions_source = None
+        self.trust_proportions = True
+        self.constraint_weight = None
+        self.model_info = None
+        self.xr_ranks = None
     @property
     def sample_ref(self):
         """``(package, name)`` (e.g. ``('molass_data', 'SAMPLE1')``) if self.folder is a bundled sample

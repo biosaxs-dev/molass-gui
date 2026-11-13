@@ -27,8 +27,8 @@ at a time, with live plots at each step.
 | 0 Launcher | `launcher.py` | Choose **New Analysis** or **Open Existing Analysis** |
 | 1 Setup | `app.py` | Enter/pick the data folder |
 | 2 Naive View | `naive_view.py` | `plot_compact` with baseline; components spinbox pre-filled via `recommend_decomposition_options()`; when the XR/UV mapping rests on >= 3 peaks and rules some detected peaks out (PROTEINS5: 5 of 7), the Peak positions field is pre-filled with the confirmed ones (`recommend_decomposition_options(confirm_with_uv=True)`, needs a molass release with molass-library#382); **Decompose** |
-| 3 Quick Optimization View | `quick_view.py` | Review EGH decomposition; pick a column model; **Upgrade** or **Skip** |
-| 4 Upgraded View | `upgraded_view.py` | Review upgraded decomposition; pick method (BH/DE) and subprocess option; **Rigorous Optimization…** |
+| 3 Quick Optimization View | `quick_view.py` | Review EGH decomposition; pick a column model; **Upgrade** or **Skip**; **← Naive View** to decompose again |
+| 4 Upgraded View | `upgraded_view.py` | Review upgraded decomposition; pick method (BH/DE) and subprocess option; **Rigorous Optimization…**; **← Quick View** to choose another model |
 | 5 Rigorous Optimization View | `rigorous_view.py` | 5-panel live monitor (UV/XR/Score/SV-history/Rg-history); auto-starts; **Terminate**/**Resume** |
 
 Every phase also has **"Continue in Notebook…"**, which exports the exact
@@ -36,16 +36,28 @@ pipeline run so far as a real `.ipynb` and opens it — the escape hatch for
 anything needing more flexibility than the wizard offers (see design
 principle below).
 
-## Design principle: this GUI stays a simple linear wizard, on purpose
+## Design principle: a simple linear wizard, with one step back before the Rigorous run
 
-There is no Back button and no way to reopen a previous phase's window other
-than closing the whole session. This was deliberately reverted from a more
-flexible design. If a feature request implies "flexibility" (back
-navigation, comparing multiple in-flight runs, re-entrant editing with
-tweaked parameters), the answer is **"build it as a notebook workflow
-instead"**, not "add a control here" — that's exactly what "Continue in
-Notebook…" is for. Don't propose reintroducing window/back-navigation
-controls to this GUI without raising this tradeoff explicitly first.
+The wizard is linear on purpose; flexibility beyond that belongs in a notebook. The one exception (molass-gui#20,
+asked for by beamline users) is a **Back** step through the cheap phases that come *before* the Rigorous run: the
+**← Naive View** button of the Quick View (to change the components, proportions or peak positions and Decompose again)
+and the **← Quick View** button of the Upgraded View (to choose another model). Each destroys the view it is in
+(`plot_embed.close_view()`: `plt.close()` + `gc.collect()` on the main thread) and shows the previous one again as it was
+left (those windows are only withdrawn, not destroyed); choosing again replaces the result, so the session is still
+one line, with no second branch and no windows to compare. Things that must stay true:
+
+- No Back after the Rigorous view has been opened (it is a child window of the Upgraded View; leaving would stop a
+  run), and not while an Upgrade or the ranks suggestion runs (a worker thread must not report to a destroyed window).
+- The Rg curve survives the round trip: `NaiveView` keeps the queue of the computation and the finished curve and hands
+  them to the next `QuickView`; the polling of `attach_rgcurve_worker` stops when its window is gone, leaving the queue
+  alone.
+- `SessionContext` describes exactly what is on screen: going back undoes what the left views contributed
+  (`forget_decomposition()` for the Quick View, `model_info = None` for the Upgraded View), so that "Continue in
+  Notebook…" never exports a choice that was undone.
+
+Anything more (comparing several in-flight runs, back from the Rigorous view, re-entrant editing of parameters) is
+still **"build it as a notebook workflow instead"** — that's what "Continue in Notebook…" is for. Raise the tradeoff
+explicitly before proposing more window/back-navigation controls.
 
 ---
 

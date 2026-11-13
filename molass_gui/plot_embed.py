@@ -43,6 +43,17 @@ def close_dialog_figure(dlg, fig):
     dlg.destroy()
 
 
+def close_view(win, plot_state):
+    """Destroy a phase view that the user left with a Back button: its dialogs go with it (their cleanups run), the
+    embedded figure of *plot_state* (the tuple returned by embed_plot, or None) is closed and the garbage collected
+    here, on the main thread -- same rationale as close_dialog_figure()."""
+    from molass_gui.window_tree import close_window
+    if plot_state is not None:
+        plt.close(plot_state[2])
+    close_window(win)
+    gc.collect()
+
+
 _last_export_format = 'dat'
 
 

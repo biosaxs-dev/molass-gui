@@ -25,7 +25,7 @@ _IMMATURE_MODEL_LABELS = {'EGH \u2192 SDM (lognormal)'}
 
 class QuickView:
     def __init__(self, decomp, trimmed, nc, ctx, parent=None, app_root=None, session_tag=None,
-                 rgcurve_queue=None, found_notices=()):
+                 rgcurve_queue=None, found_notices=(), rgcurve=None, back=None):
         self._decomp = decomp
         self._notices = list(found_notices)   # what molass said when the decomposition was made (molass-gui#19)
         self._trimmed = trimmed
@@ -34,7 +34,8 @@ class QuickView:
         self._parent = parent
         self._app_root = app_root
         self._session_tag = session_tag
-        self._rgcurve = None
+        self._rgcurve = rgcurve    # already computed when the user came back to the Naive View and decomposed again
+        self._back = back          # callback(rgcurve) that shows the Naive View again (the "Naive View" button)
         # Queue from an Rg-curve computation already kicked off as early as
         # NaiveView._detect_worker (see rgcurve_worker.py) -- attached to below in
         # show() instead of starting a redundant, later one.
@@ -54,6 +55,8 @@ class QuickView:
         hdr = ttk.Frame(win, padding=(8, 4))
         hdr.pack(fill=tk.X)
 
+        self._back_btn = ttk.Button(hdr, text="\u2190 Naive View", command=self._go_back)
+        self._back_btn.pack(side=tk.LEFT, padx=(0, 12))
         ttk.Label(hdr, text="Model:").pack(side=tk.LEFT)
         if feature_flags.DEVELOP_MODE_ENABLED:
             model_labels = _MODEL_LABELS
@@ -144,11 +147,12 @@ class QuickView:
         # Show EGH plot_components immediately; Rg curve overlay follows once ready.
         # Attach to the computation NaiveView._detect_worker already kicked off (far
         # earlier -- right after corrected_copy()) rather than starting a new one here.
-        result = self._decomp.plot_components()
-        self._plot_state = embed_plot(win, result.fig)
         self._win = win
+        self._redraw()
 
-        if self._rgcurve_queue is not None:
+        if self._rgcurve is not None:
+            self._enable_rgcurve_buttons()
+        elif self._rgcurve_queue is not None:
             attach_rgcurve_worker(win, self._rgcurve_queue, rgcurve_n_frames(self._decomp),
                                   self._rg_var, self._on_rgcurve_ready)
         else:
@@ -163,7 +167,8 @@ class QuickView:
     def _suggest_ranks(self):
         # compute_scds() is a real computation (ConcDepend/RgDiffRatios), so
         # this runs in a background thread rather than on every window open.
-        token = busy.begin(self._win, self._status_var, "Computing suggested ranks\u2026", key="suggest")
+        token = busy.begin(self._win, self._status_var, "Computing suggested ranks\u2026", buttons=[self._back_btn],
+                           key="suggest")
         if token is None:
             return
 
@@ -218,11 +223,26 @@ class QuickView:
         self._rgcurve = rgcurve
         with busy.working(self._win, self._status_var, "Drawing the components\u2026"):
             self._redraw()
+        self._enable_rgcurve_buttons()
+
+    def _enable_rgcurve_buttons(self):
         self._action_btn.state(["!disabled"])
         self._params_btn.state(["!disabled"])
         self._homog_btn.state(["!disabled"])
         self._continuity_btn.state(["!disabled"])
         self._mass_btn.state(["!disabled"])
+
+    def _go_back(self):
+        """Leave this view (with its decomposition and what was done to it) for the Naive View, to decompose again."""
+        from molass_gui.plot_embed import close_view
+        rgcurve = self._rgcurve
+        close_view(self._win, self._plot_state)
+        self._back(rgcurve)
+
+    def _show_again(self):
+        """The Upgraded View was left by its Back button: this view is up as it was, and the upgrade is undone."""
+        self._ctx.model_info = None
+        self._win.deiconify()
 
     def _show_mass(self):
         from molass_gui.mass_dialog import show_mass
@@ -263,7 +283,8 @@ class QuickView:
             from molass_gui.upgraded_view import UpgradedView
             UpgradedView(self._decomp, self._trimmed, self._nc, model_info, self._ctx,
                          rgcurve=self._rgcurve, score=self._score, parent=self._win,
-                         app_root=self._app_root, session_tag=self._session_tag).show()
+                         app_root=self._app_root, session_tag=self._session_tag,
+                         back=self._show_again).show()
             self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
 
     def _upgrade(self):
@@ -274,7 +295,7 @@ class QuickView:
             return
         ln_pore_sigma = float(self._psd_sigma_var.get()) if pore_dist == 'lognormal' else None
         token = busy.begin(self._win, self._status_var, f"Upgrading to {model_display_name(model_key)}\u2026",
-                           buttons=[self._action_btn], key="upgrade")
+                           buttons=[self._action_btn, self._back_btn], key="upgrade")
         if token is None:
             return
 
@@ -304,7 +325,8 @@ class QuickView:
                         # no longer applies -- UpgradedView builds its own on first use.
                         UpgradedView(upgraded, self._trimmed, self._nc, model_info, self._ctx,
                                      rgcurve=self._rgcurve, score=None, parent=self._win,
-                                     app_root=self._app_root, session_tag=self._session_tag).show()
+                                     app_root=self._app_root, session_tag=self._session_tag,
+                                     back=self._show_again).show()
                         self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
                     except Exception as exc:  # a Tk callback: its traceback would only reach a stderr nobody reads
                         on_error(str(exc) or type(exc).__name__)
