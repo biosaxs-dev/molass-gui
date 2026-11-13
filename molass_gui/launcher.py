@@ -14,13 +14,15 @@ class Launcher(tk.Tk):
         super().__init__()
         from molass_gui import dpi, get_version
         dpi.init(self)   # after dpi.enable() in main(): the scale factor for what is fixed in pixels
-        self.title("Molass %s" % get_version())
+        title = "Molass %s" % get_version()
+        self.title(title)
         self.resizable(False, False)
         self._configure_style()
         self._build_ui()
         self.update_idletasks()
-        # widen if needed so the titlebar text isn't clipped by content width
-        width = max(self.winfo_reqwidth(), dpi.px(320))
+        # widen if needed so the titlebar text isn't clipped by content width; the title bar
+        # is drawn at the system DPI, so px() (which follows --ui-scale) alone is not enough
+        width = max(self.winfo_reqwidth(), dpi.px(320), dpi.titlebar_width(self, title))
         self.geometry("%dx%d" % (width, self.winfo_reqheight()))
         self.protocol("WM_DELETE_WINDOW", self.close_session)
 

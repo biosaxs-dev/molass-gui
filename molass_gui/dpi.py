@@ -14,6 +14,7 @@ MIN_SCALE, MAX_SCALE = 0.5, 4.0
 BASE_FIGURE_DPI = 100.0     # matplotlib's default, kept for savefig so that exported images do not change
 
 _factor = 1.0
+_system = 1.0       # the system scaling seen by ``init`` (before Tk's own scaling is changed)
 _requested = DEFAULT_UI_SCALE
 
 
@@ -51,8 +52,8 @@ def enable():
 
 def init(root):
     """Decide the scale factor for this session and apply it to Tk and matplotlib. Returns the factor."""
-    global _factor
-    system = max(1.0, float(root.winfo_fpixels("1i")) / 96.0)
+    global _factor, _system
+    system = _system = max(1.0, float(root.winfo_fpixels("1i")) / 96.0)
     chosen = parse_ui_scale(_requested)
     _factor = system if chosen is None else chosen
     # Tk sizes its fonts (given in points) by this value: 96 dpi / 72 points per inch at factor 1.0
@@ -65,6 +66,24 @@ def init(root):
 
 def factor():
     return _factor
+
+
+def titlebar_width(root, title):
+    # root.winfo_fpixels("1i") cannot be asked here: init() has already replaced Tk's scaling by the UI scale
+    """Pixels a window needs for its whole *title* to show in the title bar.
+
+    The title bar is drawn by Windows at the system DPI, independent of ``--ui-scale``, so a window sized by
+    ``px(...)`` at factor 1.0 on a 150 % display is too narrow and the title is cut off ("Molass...").
+    Counts the icon, the title in the caption font and the three caption buttons (all given for 96 dpi).
+    """
+    import tkinter.font as tkfont
+    system = _system if sys.platform == "win32" else 1.0
+    caption = tkfont.Font(root=root, family="Segoe UI", size=-int(round(12 * system)))
+    try:
+        text = caption.measure(title)
+    finally:
+        del caption
+    return int(round((16 + 8 + 3 * 46 + 8) * system)) + text
 
 
 def px(n):
