@@ -200,6 +200,20 @@ def test_the_show_trimming_button_opens_the_dialog_for_the_entire_and_the_trimme
     assert calls == [(ssd, trimmed, None), (ssd, trimmed, "dlg")]      # the open dialog is handed back to be raised
 
 
+def test_the_show_mapping_button_opens_the_dialog_for_the_trimmed_data(root, monkeypatch):
+    import molass_gui.mapping_dialog as mapping_dialog
+    calls = []
+    monkeypatch.setattr(mapping_dialog, "show_mapping",
+                        lambda win, status_var, trimmed, previous=None: calls.append((trimmed, previous)) or "dlg")
+    trimmed = FakeTrimmed(FakeCorrected(AUTO))
+    view = NaiveView(SimpleNamespace(), trimmed, SimpleNamespace(), parent=root,
+                     app_root=SimpleNamespace(close_session=lambda: None))
+    run_loop(root, lambda: enabled(view._decomp_btn), first=view.show)
+    view._show_mapping()
+    view._show_mapping()
+    assert calls == [(trimmed, None), (trimmed, "dlg")]
+
+
 def test_a_failed_detection_ends_the_busy_state(root, monkeypatch):
     def boom(*_args):
         raise ValueError("boom")

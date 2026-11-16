@@ -53,6 +53,13 @@ what was cut away, click **Show trimming…**: it draws the entire data with the
 kept part shaded, for UV and X-ray (the data matrix, the elution curve and the
 spectral or scattering curve). Check there that the kept frames and angles
 still cover what you care about.
+
+**Show mapping…** shows how the UV frames are related to the X-ray frames
+(`UV frame = a × XR frame + b`), which the trimming and the later fit rely on.
+The left plot lays the mapped UV curve over the X-ray curve: the peaks should
+sit on each other. The right plot shows the matched peaks and the fitted line;
+with a single peak the line rests on its mean and width only and is much less
+certain. The header says whether the mapping looks plausible.
 For `SAMPLE1`, two peaks are obviously visible — but look closely at the
 left-hand peak's shoulder: there's a smaller bump riding on it. Fitting it
 as part of the same component would blur two real, distinct scattering
