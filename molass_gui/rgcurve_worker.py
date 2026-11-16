@@ -14,17 +14,22 @@ is the Tk-free half that can be called at that point; attach_rgcurve_worker() is
 Tk-side half a later view uses to pick up progress/results once it has a status_var/
 on_done to drive.
 
-Because this is a CPU-bound, pure-Python per-frame loop, it genuinely competes for the
-GIL/CPU with whatever else is running -- harmless while nothing else needs responsiveness
-(e.g. while the user is just looking at NaiveView's plot), but visibly slows down a
-concurrent CPU-bound caller (e.g. quick_decomposition() and the subsequent view's own
-UI/plot build). start_rgcurve_computation()'s optional go_event lets a caller fully
-yield this thread for exactly that window, then let it resume.
+The per-frame loop is CPU-bound pure Python: in a thread it keeps the GIL and makes every
+Tk/matplotlib draw of this process ~50x slower for a minute or more (molass-gui#23). So it runs
+in a child process (molass-library#400, SecSaxsData.start_rg_curve_process()), which shares
+the XR data with this process and writes its running Rg values into shared memory. A small
+pump thread (it only sleeps and polls) turns that job into the queue.Queue interface below, so
+the views are unchanged. Objects without start_rg_curve_process() (and curves that are already
+known or on disk) go through the plain thread, which is then instant or a test double.
 """
+import os
 import queue
 import threading
+import time
 
 from molass_gui import busy
+
+PUMP_INTERVAL = 0.1
 
 def rgcurve_n_frames(obj):
     """Number of XR frames for *obj* -- a corrected SecSaxsData or a Decomposition."""
@@ -34,35 +39,53 @@ def rgcurve_n_frames(obj):
     return len(ssd.xr.jv)
 
 
-def start_rgcurve_computation(obj, go_event=None):
-    """Compute obj.get_rg_curve() in a background thread, with no Tk dependency.
+def _process_target(obj):
+    """The SecSaxsData whose Rg curve should be computed in a child process, or None for the plain thread:
+    objects that cannot do it, and curves already known or on disk (loading them is instant)."""
+    ssd = getattr(obj, 'ssd', obj)
+    if not hasattr(ssd, 'start_rg_curve_process'):
+        return None
+    if getattr(obj, 'has_rg_curve', False):
+        return None
+    cache_path = getattr(obj, '_rg_curve_cache_path', None)
+    if cache_path is not None and os.path.isfile(cache_path):
+        return None
+    return ssd
+
+
+def start_rgcurve_computation(obj):
+    """Compute obj.get_rg_curve() in the background, with no Tk dependency.
 
     *obj* is anything exposing get_rg_curve(progress_cb=...) -- a corrected
     SecSaxsData or a Decomposition. Can be called the instant *obj* is ready,
     independent of any GUI (e.g. right after corrected_copy(), long before a
-    Decomposition or its view exist).
-
-    *go_event* (a threading.Event), if given, is waited on after every frame --
-    i.e. it must be *set* for the computation to proceed, and *clearing* it
-    pauses the computation (blocking, not busy-waiting) until it is set again.
-    This is a cooperative, GIL-friendly way to fully yield this (CPU-bound,
-    pure-Python per-frame Guinier fit) thread to another caller doing its own
-    CPU-heavy work -- e.g. NaiveView clears this during quick_decomposition() +
-    QuickView's UI build, since both being CPU-bound at once visibly slows down
-    exactly the moment QuickView should appear, then sets it again once
-    QuickView is shown. Defaults to always-set behavior (never pauses) if None.
+    Decomposition or its view exist). The computation runs in a child process
+    (see the module docstring), so it does not compete with the GUI for the GIL.
 
     Returns a queue.Queue carrying ('progress', j), ('done', rgcurve) and
     ('error', str) messages for a later caller to pick up via
     attach_rgcurve_worker(). If the computation finishes before anything
     attaches, the 'done'/'error' message simply waits in the queue.
+    The queue's ``stop`` attribute (a threading.Event) cancels the computation
+    when set -- see stop_rgcurve_computation().
     """
     q = queue.Queue()
+    q.stop = threading.Event()
+
+    ssd = _process_target(obj)
+    job = None
+    if ssd is not None:
+        try:
+            job = ssd.start_rg_curve_process()
+        except Exception:
+            job = None      # no child process possible here: the slow thread beats no curve
+
+    if job is not None:
+        threading.Thread(target=_pump, args=(job, q, obj, ssd), daemon=True).start()
+        return q
 
     def _cb(rg_buffer, j):
         q.put(('progress', j))
-        if go_event is not None:
-            go_event.wait()
 
     def worker():
         try:
@@ -73,6 +96,47 @@ def start_rgcurve_computation(obj, go_event=None):
 
     threading.Thread(target=worker, daemon=True).start()
     return q
+
+
+def _pump(job, q, obj, ssd):
+    """Turn the RgCurveJob into the queue messages: it only sleeps and polls, so it costs the GUI nothing."""
+    last = 0
+    try:
+        while True:
+            if q.stop.is_set():
+                job.cancel()
+                return
+            outcome = job.poll()
+            n_done, _ = job.progress()
+            if n_done > last:
+                last = n_done
+                q.put(('progress', n_done - 1))
+            if outcome is None:
+                time.sleep(PUMP_INTERVAL)
+                continue
+            kind, payload = outcome
+            if kind == 'done':
+                rgcurve = payload
+                if obj is not ssd:
+                    try:
+                        rgcurve = obj.get_rg_curve()    # cached by now; also fills a decomposition's own cache file
+                    except Exception:
+                        pass
+                q.put(('done', rgcurve))
+            elif kind == 'error':
+                q.put(('error', payload.splitlines()[0] if payload else 'the Rg-curve process failed'))
+            return
+    except Exception as exc:
+        job.close()
+        q.put(('error', str(exc) or type(exc).__name__))
+
+
+def stop_rgcurve_computation(q):
+    """Cancel the computation behind a queue from start_rgcurve_computation() (a no-op for the plain
+    thread, which cannot be stopped, and for one that is already finished)."""
+    stop = getattr(q, 'stop', None)
+    if stop is not None:
+        stop.set()
 
 
 def attach_rgcurve_worker(win, q, n_frames, status_var, on_done, progress_cb=None):

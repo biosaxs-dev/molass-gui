@@ -1,5 +1,4 @@
 """NaiveView — Phase 2: plot_compact + num_components → Decompose → QuickView."""
-import contextlib
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -34,15 +33,6 @@ class NaiveView:
         # The finished Rg curve, once a QuickView has seen it and the user came back here: the next QuickView
         # gets it directly (the queue's 'done' message has been consumed by then).
         self._rgcurve = None
-        # threading.Event.wait() blocks while *clear* and returns immediately while
-        # *set* -- so this is a "go ahead" flag: set (the default) means the Rg-curve
-        # background computation may proceed; _decompose() clears it to pause that
-        # computation for its own CPU-bound quick_decomposition() + QuickView UI-build
-        # window (both being CPU-bound at once otherwise visibly delays QuickView's
-        # appearance), then sets it again once QuickView is shown (or on error) to
-        # let the Rg curve resume toward completion.
-        self._rgcurve_go = threading.Event()
-        self._rgcurve_go.set()
 
     def show(self):
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
@@ -155,9 +145,9 @@ class NaiveView:
             # later -- see rgcurve_worker.py). Kick it off here, in parallel with
             # auto-detection below and with however long the user takes to click
             # Decompose, instead of waiting for a Decomposition/QuickView to exist.
-            # go_event: _decompose() clears this to pause for its own CPU-bound window.
+            # Runs in a child process (molass-gui#23): it does not compete with the GUI for the GIL.
             from molass_gui.rgcurve_worker import start_rgcurve_computation
-            rgcurve_queue = start_rgcurve_computation(corrected, go_event=self._rgcurve_go)
+            rgcurve_queue = start_rgcurve_computation(corrected)
             auto_opts = corrected.recommend_decomposition_options()
 
             # Which detected peaks the XR/UV mapping also sees (molass-library#382), to tell them from the merely
@@ -186,7 +176,7 @@ class NaiveView:
                 # detection result: the greedy recognition); without it there is nothing to decompose.
                 if corrected is not None:
                     self._corrected = corrected
-                    self._rgcurve_queue = rgcurve_queue
+                    self._set_rgcurve_queue(rgcurve_queue)
                     self._auto_opts = {}
                     self._nc_var.set(3)
                     self._detect_busy.end(status=f"Auto-detect failed ({m}) -- using manual default")
@@ -199,7 +189,7 @@ class NaiveView:
 
         def on_main():
             self._corrected = corrected
-            self._rgcurve_queue = rgcurve_queue
+            self._set_rgcurve_queue(rgcurve_queue)
             self._auto_opts = auto_opts
             self._nc_var.set(auto_opts.get('num_components', 1))
             self._candidates = candidates
@@ -227,37 +217,22 @@ class NaiveView:
         self._win.deiconify()
         self._status_var.set("")
 
-    @contextlib.contextmanager
-    def _rg_paused(self):
-        """Hold the Rg-curve thread while a dialog is built and drawn on the main thread.
-
-        That thread is pure Python and keeps the GIL; drawing a figure (many small Tk and matplotlib calls, each
-        giving the GIL up and waiting for it back) then takes ~50 s instead of ~1 s while the curve is computed,
-        which on a 1000-frame data set lasts over a minute. Resumed afterwards only if it was running before:
-        _decompose() pauses it too, for longer.
-        """
-        was_running = self._rgcurve_go.is_set()
-        self._rgcurve_go.clear()
-        try:
-            yield
-        finally:
-            if was_running:
-                self._rgcurve_go.set()
+    def _set_rgcurve_queue(self, rgcurve_queue):
+        """Keep the queue of the Rg-curve computation; stop its child process when the session is closed."""
+        from molass_gui.rgcurve_worker import stop_rgcurve_computation
+        from molass_gui.window_tree import register_window_cleanup
+        self._rgcurve_queue = rgcurve_queue
+        if rgcurve_queue is not None:
+            register_window_cleanup(self._win, lambda: stop_rgcurve_computation(rgcurve_queue))
 
     def _show_trimming(self):
         from molass_gui.trimming_dialog import show_trimming
-        with self._rg_paused():
-            self._trimming_dlg = show_trimming(self._win, self._status_var, self._ssd, self._trimmed,
-                                               previous=self._trimming_dlg)
-            if self._trimming_dlg is not None:
-                self._trimming_dlg.update()     # mapped and drawn now, while the thread is still held
+        self._trimming_dlg = show_trimming(self._win, self._status_var, self._ssd, self._trimmed,
+                                           previous=self._trimming_dlg)
 
     def _show_mapping(self):
         from molass_gui.mapping_dialog import show_mapping
-        with self._rg_paused():
-            self._mapping_dlg = show_mapping(self._win, self._status_var, self._trimmed, previous=self._mapping_dlg)
-            if self._mapping_dlg is not None:
-                self._mapping_dlg.update()
+        self._mapping_dlg = show_mapping(self._win, self._status_var, self._trimmed, previous=self._mapping_dlg)
 
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open
@@ -432,18 +407,10 @@ class NaiveView:
                            key="decompose")
         if token is None:
             return
-        # Pause the (possibly still-running) Rg-curve computation for this whole
-        # CPU-bound window -- quick_decomposition() below and QuickView's UI build
-        # in on_main are both CPU-bound too, and a background thread contending for
-        # the GIL at the same time visibly delays QuickView's appearance. Set again
-        # once QuickView is actually shown (or on error), letting it resume.
-        self._rgcurve_go.clear()
-
         def on_error(m):
             from molass_gui.error_dialog import show_error_detail
             token.end()
             show_error_detail(self._win, self._status_var, m, title="Decomposition failed")
-            self._rgcurve_go.set()  # don't leave the Rg curve stuck paused on failure
 
         def worker():
             try:
@@ -474,7 +441,6 @@ class NaiveView:
                               rgcurve_queue=self._rgcurve_queue, found_notices=found,
                               rgcurve=self._rgcurve, back=self._show_again).show()
                     self._win.withdraw()  # unmap, not just minimize -- iconify() still leaves a taskbar thumbnail
-                    self._rgcurve_go.set()  # resume the Rg curve now that QuickView is up
                 except Exception as exc:  # a Tk callback: its traceback would only reach a stderr nobody reads
                     on_error(str(exc) or type(exc).__name__)
                 else:
