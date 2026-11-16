@@ -1,4 +1,5 @@
 """NaiveView — Phase 2: plot_compact + num_components → Decompose → QuickView."""
+import contextlib
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -226,14 +227,37 @@ class NaiveView:
         self._win.deiconify()
         self._status_var.set("")
 
+    @contextlib.contextmanager
+    def _rg_paused(self):
+        """Hold the Rg-curve thread while a dialog is built and drawn on the main thread.
+
+        That thread is pure Python and keeps the GIL; drawing a figure (many small Tk and matplotlib calls, each
+        giving the GIL up and waiting for it back) then takes ~50 s instead of ~1 s while the curve is computed,
+        which on a 1000-frame data set lasts over a minute. Resumed afterwards only if it was running before:
+        _decompose() pauses it too, for longer.
+        """
+        was_running = self._rgcurve_go.is_set()
+        self._rgcurve_go.clear()
+        try:
+            yield
+        finally:
+            if was_running:
+                self._rgcurve_go.set()
+
     def _show_trimming(self):
         from molass_gui.trimming_dialog import show_trimming
-        self._trimming_dlg = show_trimming(self._win, self._status_var, self._ssd, self._trimmed,
-                                           previous=self._trimming_dlg)
+        with self._rg_paused():
+            self._trimming_dlg = show_trimming(self._win, self._status_var, self._ssd, self._trimmed,
+                                               previous=self._trimming_dlg)
+            if self._trimming_dlg is not None:
+                self._trimming_dlg.update()     # mapped and drawn now, while the thread is still held
 
     def _show_mapping(self):
         from molass_gui.mapping_dialog import show_mapping
-        self._mapping_dlg = show_mapping(self._win, self._status_var, self._trimmed, previous=self._mapping_dlg)
+        with self._rg_paused():
+            self._mapping_dlg = show_mapping(self._win, self._status_var, self._trimmed, previous=self._mapping_dlg)
+            if self._mapping_dlg is not None:
+                self._mapping_dlg.update()
 
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open

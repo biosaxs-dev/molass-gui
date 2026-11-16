@@ -185,11 +185,17 @@ def test_detection_and_decompose_show_the_one_busy_signal(root):
     assert not _busy_cursor(view._win) and enabled(view._decomp_btn)    # the failure ended the busy state too
 
 
+class FakeDialog:
+    def update(self):
+        pass
+
+
 def test_the_show_trimming_button_opens_the_dialog_for_the_entire_and_the_trimmed_data(root, monkeypatch):
     import molass_gui.trimming_dialog as trimming_dialog
     calls = []
+    dlg = FakeDialog()
     monkeypatch.setattr(trimming_dialog, "show_trimming",
-                        lambda win, status_var, ssd, trimmed, previous=None: calls.append((ssd, trimmed, previous)) or "dlg")
+                        lambda win, status_var, ssd, trimmed, previous=None: calls.append((ssd, trimmed, previous)) or dlg)
     ssd = SimpleNamespace()
     trimmed = FakeTrimmed(FakeCorrected(AUTO))
     view = NaiveView(ssd, trimmed, SimpleNamespace(), parent=root,
@@ -197,21 +203,58 @@ def test_the_show_trimming_button_opens_the_dialog_for_the_entire_and_the_trimme
     run_loop(root, lambda: enabled(view._decomp_btn), first=view.show)
     view._show_trimming()
     view._show_trimming()
-    assert calls == [(ssd, trimmed, None), (ssd, trimmed, "dlg")]      # the open dialog is handed back to be raised
+    assert calls == [(ssd, trimmed, None), (ssd, trimmed, dlg)]      # the open dialog is handed back to be raised
 
 
 def test_the_show_mapping_button_opens_the_dialog_for_the_trimmed_data(root, monkeypatch):
     import molass_gui.mapping_dialog as mapping_dialog
     calls = []
+    dlg = FakeDialog()
     monkeypatch.setattr(mapping_dialog, "show_mapping",
-                        lambda win, status_var, trimmed, previous=None: calls.append((trimmed, previous)) or "dlg")
+                        lambda win, status_var, trimmed, previous=None: calls.append((trimmed, previous)) or dlg)
     trimmed = FakeTrimmed(FakeCorrected(AUTO))
     view = NaiveView(SimpleNamespace(), trimmed, SimpleNamespace(), parent=root,
                      app_root=SimpleNamespace(close_session=lambda: None))
     run_loop(root, lambda: enabled(view._decomp_btn), first=view.show)
     view._show_mapping()
     view._show_mapping()
-    assert calls == [(trimmed, None), (trimmed, "dlg")]
+    assert calls == [(trimmed, None), (trimmed, dlg)]
+
+
+def test_the_dialogs_hold_the_rg_thread_while_they_are_drawn_and_leave_it_as_they_found_it(root, monkeypatch):
+    """The Rg-curve thread keeps the GIL: a figure drawn meanwhile takes ~50 s instead of ~1 s (found on a
+    1000-frame data set), so it is held during the build, resumed after, and left held if Decompose held it."""
+    import molass_gui.trimming_dialog as trimming_dialog
+    import molass_gui.mapping_dialog as mapping_dialog
+    seen = []
+    view = NaiveView(SimpleNamespace(), FakeTrimmed(FakeCorrected(AUTO)), SimpleNamespace(), parent=root,
+                     app_root=SimpleNamespace(close_session=lambda: None))
+    run_loop(root, lambda: enabled(view._decomp_btn), first=view.show)
+    monkeypatch.setattr(trimming_dialog, "show_trimming",
+                        lambda *a, **k: seen.append(view._rgcurve_go.is_set()) or FakeDialog())
+    monkeypatch.setattr(mapping_dialog, "show_mapping",
+                        lambda *a, **k: seen.append(view._rgcurve_go.is_set()) or FakeDialog())
+    assert view._rgcurve_go.is_set()
+    view._show_trimming()
+    view._show_mapping()
+    assert seen == [False, False] and view._rgcurve_go.is_set()          # held while drawing, running again after
+    view._rgcurve_go.clear()                                             # _decompose() is holding it
+    view._show_trimming()
+    assert seen[-1] is False and not view._rgcurve_go.is_set()           # not resumed under its feet
+
+
+def test_a_failing_dialog_still_releases_the_rg_thread(root, monkeypatch):
+    import molass_gui.trimming_dialog as trimming_dialog
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(trimming_dialog, "show_trimming", boom)
+    view = NaiveView(SimpleNamespace(), FakeTrimmed(FakeCorrected(AUTO)), SimpleNamespace(), parent=root,
+                     app_root=SimpleNamespace(close_session=lambda: None))
+    run_loop(root, lambda: enabled(view._decomp_btn), first=view.show)
+    with pytest.raises(RuntimeError):
+        view._show_trimming()
+    assert view._rgcurve_go.is_set()
 
 
 def test_a_failed_detection_ends_the_busy_state(root, monkeypatch):
