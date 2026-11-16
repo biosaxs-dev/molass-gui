@@ -104,7 +104,12 @@ class NaiveView:
 
         # the angular range the trimming kept (molass-library#342): read-only, so the default is visible
         self._range_var = tk.StringVar(value=fmt_qrange(self._ssd, self._trimmed))
-        ttk.Label(win, textvariable=self._range_var, foreground="#555", padding=(8, 0)).pack(anchor=tk.W)
+        range_row = ttk.Frame(win, padding=(8, 0))
+        range_row.pack(fill=tk.X)
+        ttk.Label(range_row, textvariable=self._range_var, foreground="#555").pack(side=tk.LEFT)
+        # the whole data with the kept part marked, which the trimmed plot below cannot tell
+        ttk.Button(range_row, text="Show trimming\u2026", command=self._show_trimming).pack(side=tk.LEFT, padx=12)
+        self._trimming_dlg = None
 
         # Show trimmed compact plot with baseline overlay
         # the mapping check of the library warns here when the UV/XR mapping looks implausible (molass-library#371)
@@ -218,6 +223,11 @@ class NaiveView:
         self._ctx.forget_decomposition()
         self._win.deiconify()
         self._status_var.set("")
+
+    def _show_trimming(self):
+        from molass_gui.trimming_dialog import show_trimming
+        self._trimming_dlg = show_trimming(self._win, self._status_var, self._ssd, self._trimmed,
+                                           previous=self._trimming_dlg)
 
     def _export_to_notebook(self):
         from molass_gui.notebook_export import export_and_open

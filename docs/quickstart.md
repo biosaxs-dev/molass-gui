@@ -48,6 +48,11 @@ marked by the yellow line. Molass already suggests a starting value for
 **Components**, computed from the data itself — but look at the plot before
 accepting it.
 
+The line above the plot tells which angular range the trimming kept. To see
+what was cut away, click **Show trimming…**: it draws the entire data with the
+kept part shaded, for UV and X-ray (the data matrix, the elution curve and the
+spectral or scattering curve). Check there that the kept frames and angles
+still cover what you care about.
 For `SAMPLE1`, two peaks are obviously visible — but look closely at the
 left-hand peak's shoulder: there's a smaller bump riding on it. Fitting it
 as part of the same component would blur two real, distinct scattering
