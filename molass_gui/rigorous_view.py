@@ -96,20 +96,42 @@ class RigorousView:
         # (re)loads; not written back to recipe.json.
         self._xr_ranks = None
         self._fork_dlg = None
+        self._on_load_progress = None
+        self._on_load_done = None
 
     @classmethod
-    def open_existing(cls, analysis_folder, parent=None, app_root=None, session_tag=None):
+    def open_existing(cls, analysis_folder, parent=None, app_root=None, session_tag=None,
+                      on_progress=None, on_done=None):
         """Build a RigorousView showing the best completed result for an
         already-existing analysis_folder (Open Existing Analysis path), with
         a Resume button in place of the usual auto-start.
 
         decomp/trimmed/est_kwargs are not known yet at construction time --
         they get rebuilt from recipe.json inside _prep_main_result().
+
+        Loading takes minutes on large data, on the main thread, so nothing is repainted meanwhile. With
+        ``on_done`` the window stays hidden until the result is drawn and the caller (the Open Existing
+        Analysis dialog) keeps itself on screen, saying what is going on:
+
+        on_progress(message) : the step that starts now ("Rebuilding the analysis...").
+        on_done(error) : ``None`` once the result is drawn (the window is then still hidden: the caller shows it),
+            or a one-line message if loading failed. Called once.
         """
         view = cls(None, None, {}, analysis_folder, ctx=None,
                    parent=parent, app_root=app_root, session_tag=session_tag)
         view._result_mode = True
+        view._on_load_progress = on_progress
+        view._on_load_done = on_done
         return view
+
+    def _load_progress(self, message):
+        if self._on_load_progress is not None:
+            self._on_load_progress(message)
+
+    def _load_finished(self, error=None):
+        callback, self._on_load_done = self._on_load_done, None
+        if callback is not None:
+            callback(error)
 
     def show(self):
         import matplotlib.pyplot as plt
@@ -117,6 +139,8 @@ class RigorousView:
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
         win = tk.Toplevel(self._parent)
+        if self._result_mode and self._on_load_done is not None:
+            win.withdraw()      # shown by the caller when the result is drawn: until then it would be a blank shell
         recipe = (self._est_kwargs.get('pipeline_recipe') or {})
         model  = model_display_name(recipe.get('model', 'egh'))
         method = recipe.get('method', 'bh').upper()
@@ -347,6 +371,7 @@ class RigorousView:
         try:
             from molass.Rigorous.RecipeRunner import rebuild_decomposition_from_recipe
 
+            self._load_progress("Rebuilding the analysis from its recipe (this can take minutes)\u2026")
             ssd, trimmed, decomp, recipe = rebuild_decomposition_from_recipe(self._analysis_folder)
             self._decomp = decomp
             self._decomp_for_opt = decomp
@@ -359,18 +384,23 @@ class RigorousView:
             # optimized/rg-curve/ the first time it ran -- reload that instead
             # of repeating the one-Guinier-fit-per-frame computation.
             from molass.Rigorous.CurrentStateUtils import try_fast_rg_curve
+            self._load_progress("Loading the Rg curve\u2026")
             if try_fast_rg_curve(decomp, self._analysis_folder):
                 self._on_rg_ready_result(decomp.get_rg_curve())
                 return
 
             self._prep_var.set("Computing Rg curve\u2026")
+            self._load_progress("Computing the Rg curve\u2026")
             self._win.update_idletasks()
 
             from molass_gui.rgcurve_worker import start_rgcurve_worker
-            start_rgcurve_worker(self._win, decomp, None, self._on_rg_ready_result)
+            start_rgcurve_worker(self._win, decomp, None, self._on_rg_ready_result,
+                                 progress_cb=lambda j, n: self._load_progress(
+                                     f"Computing the Rg curve\u2026 {j}/{n}"))
         except Exception as exc:
             short = str(exc).split('\n')[0][:120]
             self._prep_var.set(f"Load error: {short}")
+            self._load_finished(short or type(exc).__name__)
 
     def _on_rg_ready_result(self, rgcurve):
         try:
@@ -379,6 +409,7 @@ class RigorousView:
 
             recipe = self._est_kwargs.get('pipeline_recipe') or {}
             self._prep_var.set("Building optimizer\u2026")
+            self._load_progress("Building the optimizer\u2026")
             self._win.update_idletasks()
             score = self._decomp.score(trimmed_ssd=self._trimmed,
                                        function_code=recipe.get('function_code'))
@@ -392,6 +423,7 @@ class RigorousView:
         except Exception as exc:
             short = str(exc).split('\n')[0][:120]
             self._prep_var.set(f"Load error: {short}")
+            self._load_finished(short or type(exc).__name__)
 
     def _on_prep_done_result(self, score, best_params, sv):
         self._score = score
@@ -437,6 +469,7 @@ class RigorousView:
         # self._resume_btn was created already-enabled in show() -- no further
         # action needed here (and no .configure()/.state() call on it, since
         # this runs right after the .configure()-breaking import; see show()).
+        self._load_finished(None)
 
     def _show_running_controls(self):
         """Terminate row visible (disabled until _on_started re-enables it);

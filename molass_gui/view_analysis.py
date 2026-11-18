@@ -85,12 +85,39 @@ class ViewAnalysisView:
                     "prior rigorous optimization run.")
                 return
 
-        # This work is synchronous (no background thread): the busy signal (hourglass, message,
-        # disabled button) is put on screen before the window is blocked (see busy.py).
-        with busy.working(self._win, self._status_var, "Loading\u2026", buttons=[self._btn]):
-            recent_folders.add(folder, kind="analysis")
-            session_tag = os.path.basename(folder.rstrip("\\/")) or folder
-            from molass_gui.rigorous_view import RigorousView
-            RigorousView.open_existing(folder, parent=self._win, app_root=self._app_root,
-                                       session_tag=session_tag).show()
-            self._win.withdraw()  # unmap, not just minimize -- keeps only RigorousView on the taskbar
+        # The load runs on the main thread for as long as it takes (minutes on large data), so nothing repaints
+        # meanwhile. This window therefore stays up with the hourglass and says which step is going on, and the
+        # result window stays hidden until it is drawn; only then does this window give way. A failure comes back
+        # here (the hidden window is closed), so that another folder can be tried.
+        token = busy.begin(self._win, self._status_var, "Loading the analysis\u2026", buttons=[self._btn],
+                           key="open-existing", blocking=True)
+        if token is None:
+            return
+        recent_folders.add(folder, kind="analysis")
+        session_tag = os.path.basename(folder.rstrip("\\/")) or folder
+        from molass_gui.rigorous_view import RigorousView
+        from molass_gui.window_tree import close_window
+        holder = {}
+
+        def on_progress(message):
+            token.update(message, blocking=True)
+
+        def on_done(error):
+            view = holder["view"]
+            if error is None:
+                token.end(status="")
+                view._win.deiconify()
+                view._win.lift()
+                self._win.withdraw()  # unmap, not just minimize -- keeps only RigorousView on the taskbar
+            else:
+                token.end(status=f"Could not load: {error}")
+                close_window(view._win)
+
+        holder["view"] = RigorousView.open_existing(folder, parent=self._win, app_root=self._app_root,
+                                                    session_tag=session_tag, on_progress=on_progress,
+                                                    on_done=on_done)
+        try:
+            holder["view"].show()
+        except Exception as exc:
+            token.end(status=f"Could not load: {exc}"[:200])
+            raise
