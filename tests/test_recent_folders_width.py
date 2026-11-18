@@ -25,17 +25,6 @@ def test_the_width_follows_the_longest_path_within_limits():
     assert picker_width(["x" * 500]) == MAX_WIDTH
 
 
-@pytest.fixture
-def root():
-    try:
-        r = tk.Tk()
-    except tk.TclError as exc:
-        pytest.skip(f"no display: {exc}")
-    r.withdraw()
-    yield r
-    r.destroy()
-
-
 def _pump(root, seconds=0.2):
     end = time.time() + seconds
     while time.time() < end:

@@ -13,17 +13,6 @@ STUB_DECOMP = SimpleNamespace(ssd=SimpleNamespace(xr=SimpleNamespace(jv=[0])))
 
 
 @pytest.fixture
-def root():
-    try:
-        r = tk.Tk()
-    except tk.TclError as exc:
-        pytest.skip(f"no display: {exc}")
-    r.withdraw()
-    yield r
-    r.destroy()
-
-
-@pytest.fixture
 def app():
     return SimpleNamespace(session_closed=0, close_session=None)
 
@@ -46,10 +35,7 @@ def _view(root, app, tmp_path, name, parent=None, independent=True):
                         app_root=app, session_tag=name)
     if independent:
         view._make_independent()
-    try:
-        view.show()
-    except tk.TclError as exc:          # intermittent Tk start-up failure of matplotlib's own interpreter
-        pytest.skip(f"Tk: {exc}")
+    view.show()
     return view
 
 

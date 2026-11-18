@@ -429,6 +429,18 @@ class RigorousView:
         self._mass_btn.state(["!disabled"])
         self._optimize()  # auto-start; user can Terminate if needed
 
+    def _rebuild_from_recipe(self, rebuild):
+        """``rebuild_decomposition_from_recipe`` with its stages shown in the Open Existing dialog, if the
+        installed molass reports them (``progress_cb``, molass-library#401); otherwise just the call."""
+        import inspect
+        kwargs = {}
+        if 'progress_cb' in inspect.signature(rebuild).parameters:
+            def stage(name, fraction):
+                if name != "Done":
+                    self._load_progress(f"{name}\u2026 ({round(100 * fraction)} %)")
+            kwargs['progress_cb'] = stage
+        return rebuild(self._analysis_folder, **kwargs)
+
     def _prep_main_result(self):
         """Main-thread: rebuild the pipeline from recipe.json, then kick off
         Rg curve computation in a background thread (see _prep_main's
@@ -440,7 +452,7 @@ class RigorousView:
             from molass.Rigorous.RecipeRunner import rebuild_decomposition_from_recipe
 
             self._load_progress("Rebuilding the analysis from its recipe (this can take minutes)\u2026")
-            ssd, trimmed, decomp, recipe = rebuild_decomposition_from_recipe(self._analysis_folder)
+            ssd, trimmed, decomp, recipe = self._rebuild_from_recipe(rebuild_decomposition_from_recipe)
             self._decomp = decomp
             self._decomp_for_opt = decomp
             self._trimmed = trimmed

@@ -10,17 +10,6 @@ import pytest
 APP = SimpleNamespace(close_session=lambda: None)
 
 
-@pytest.fixture
-def root():
-    try:
-        r = tk.Tk()
-    except tk.TclError as exc:
-        pytest.skip(f"no display: {exc}")
-    r.withdraw()
-    yield r
-    r.destroy()
-
-
 def _pump(root, seconds=0.2):
     end = time.time() + seconds
     while time.time() < end:
@@ -127,3 +116,22 @@ def test_rigorous_view_without_callbacks_is_shown_as_before(root, monkeypatch, t
     root.update()
     assert view._win.state() == "normal"
     view._win.destroy()
+
+
+def test_the_stages_of_the_rebuild_are_shown_when_molass_reports_them(tmp_path):
+    from molass_gui.rigorous_view import RigorousView
+    messages = []
+    view = RigorousView.open_existing(str(tmp_path), on_progress=messages.append)
+
+    def rebuild_with_stages(folder, in_folder=None, debug=False, progress_cb=None):
+        progress_cb("Trimming", 0.25)
+        progress_cb("Done", 1.0)
+        return "result"
+
+    def rebuild_without(folder):
+        return "result"
+
+    assert view._rebuild_from_recipe(rebuild_with_stages) == "result"
+    assert messages == ["Trimming\u2026 (25 %)"]                       # "Done" is not a stage to show
+    assert view._rebuild_from_recipe(rebuild_without) == "result"     # an older molass: just the call
+
