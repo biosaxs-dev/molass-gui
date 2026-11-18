@@ -98,6 +98,70 @@ class RigorousView:
         self._fork_dlg = None
         self._on_load_progress = None
         self._on_load_done = None
+        # An independent window closes alone (its close button does not end the session); see _make_independent.
+        self._independent = False
+        self._closed = False
+        self._after_ids = set()
+
+    def _after(self, ms, fn):
+        """``self._win.after`` for a window that may close while the process goes on (an independent window):
+        nothing is scheduled once it is closed, and what is pending is cancelled by ``_on_window_closed``.
+        Also safe to call from a worker thread whose window has been closed meanwhile."""
+        if self._closed:
+            return
+        token = [None]
+
+        def run():
+            self._after_ids.discard(token[0])
+            if not self._closed:
+                fn()
+        try:
+            token[0] = self._win.after(ms, run)
+        except (tk.TclError, RuntimeError):
+            return
+        self._after_ids.add(token[0])
+
+    def _on_window_closed(self):
+        """Cleanup before the window is destroyed (``window_tree.close_window``)."""
+        self._closed = True
+        self._stopped = True
+        for after_id in list(self._after_ids):
+            try:
+                self._win.after_cancel(after_id)
+            except Exception:
+                pass
+        self._after_ids.clear()
+        try:
+            import matplotlib.pyplot as plt
+            plt.close(self._fig)
+        except Exception:
+            pass
+
+    def _make_independent(self):
+        """From now on the close button of this window closes this window (and what it opened) only, not the
+        whole session: it started, or is, a branch of its own (a fork, a loaded result) that must not end
+        with its neighbours."""
+        self._independent = True
+        if getattr(self, '_win', None) is not None:
+            self._win.protocol("WM_DELETE_WINDOW", self._close_own)
+
+    def _close_own(self):
+        """Close this window alone, after the usual confirmation if its own run is going on."""
+        from molass_gui.window_tree import confirm_and_close
+        parent = self._parent
+        if not confirm_and_close(self._win):
+            return
+        # The Open Existing dialog stays withdrawn behind its result window: gone with it when nothing else is left
+        # (the dialog has no other window of its own, since forks hang from the root, not from it).
+        try:
+            root = parent._root()
+            if (parent is not root and parent.state() == "withdrawn"
+                    and not [c for c in parent.winfo_children() if isinstance(c, tk.Toplevel)]):
+                from molass_gui.window_tree import close_window
+                close_window(parent)
+        except Exception:
+            pass
+        gc.collect()    # on the main thread: see _optimize()
 
     @classmethod
     def open_existing(cls, analysis_folder, parent=None, app_root=None, session_tag=None,
@@ -152,9 +216,13 @@ class RigorousView:
         if self._session_tag:
             title += f"  [{self._session_tag}]"
         win.title(title)
-        win.protocol("WM_DELETE_WINDOW", self._app_root.close_session)
+        # A loaded result is a branch of its own (nothing above it); so is a fork, or a view that has started one.
+        if self._result_mode:
+            self._independent = True
+        win.protocol("WM_DELETE_WINDOW", self._close_own if self._independent else self._app_root.close_session)
         register_window_cleanup(
             win, lambda: self._run_info.stop() if self._run_info is not None else None)
+        register_window_cleanup(win, self._on_window_closed)
         register_close_guard(
             win, lambda: self._run_info is not None and self._run_info.is_alive,
             "Rigorous optimization run in progress")
@@ -283,7 +351,7 @@ class RigorousView:
         if not self._result_mode:
             self._set_suptitle()
 
-        self._win.after(10, self._prep_main_result if self._result_mode else self._prep_main)
+        self._after(10, self._prep_main_result if self._result_mode else self._prep_main)
 
     def _set_suptitle(self):
         """Identify dataset, model and method (and the ranks, if any is not 1), in the same
@@ -546,7 +614,8 @@ class RigorousView:
                                                       previous=self._fork_dlg, jobs_default=jobs)
 
     def _start_fork(self, plan, score, n_jobs, method):
-        """The prepared plan is a new run: its own live window (a child of this one), seeded by the plan.
+        """The prepared plan is a new run: its own live window, seeded by the plan. It hangs from the Tk root, not
+        from this window, so closing this one leaves it alone; each of the two closes by itself from now on.
         Nothing of this analysis is touched; the new folder is made when the run starts."""
         recipe = dict(plan.recipe)
         recipe['method'] = method.lower()
@@ -554,9 +623,12 @@ class RigorousView:
                       'optimize_extra': fork_logic.optimize_extras(plan)}
         tag = os.path.basename(os.path.normpath(plan.new_folder))
         with busy.working(self._win, self._status_var, "Opening the new analysis\u2026"):
-            RigorousView(plan.decomposition, plan.info.trimmed, est_kwargs, analysis_folder=plan.new_folder,
-                         ctx=None, parent=self._win, app_root=self._app_root,
-                         session_tag=tag, score=score).show()
+            view = RigorousView(plan.decomposition, plan.info.trimmed, est_kwargs, analysis_folder=plan.new_folder,
+                                ctx=None, parent=self._win._root(), app_root=self._app_root,
+                                session_tag=tag, score=score)
+            view._make_independent()
+            view.show()
+            self._make_independent()
 
     def _optimize_extras(self):
         """The arguments a fork adds to ``optimize_rigorously``: the seed, what produced it, the note, ...
@@ -618,7 +690,7 @@ class RigorousView:
                         self._round_base_n = len(run_info.sv_history)
                     except Exception:
                         self._round_base_n = 0
-                    self._win.after(0, self._on_started)
+                    self._after(0, self._on_started)
                 run_info.wait(timeout=0)
         except Exception as exc:
             tb = traceback.format_exc()
@@ -634,7 +706,7 @@ class RigorousView:
             # check _stopped, so it must be set here or a later-round failure
             # keeps looking like normal progress instead of a visible error.
             self._stopped = True
-            self._win.after(0, lambda m=short: self._on_launch_failed(m, log_path))
+            self._after(0, lambda m=short: self._on_launch_failed(m, log_path))
 
     def _show_parameters(self):
         # run_info.best_params reflects the live/final run once one exists;
@@ -747,7 +819,7 @@ class RigorousView:
                         self._round_base_n = len(run_info.sv_history)
                     except Exception:
                         self._round_base_n = 0
-                    self._win.after(0, self._on_started)
+                    self._after(0, self._on_started)
 
             if self._num_jobs > 1:
                 # Successive-jobs pattern (molass-researcher experiment 36) --
@@ -793,7 +865,7 @@ class RigorousView:
             # next job...") forever, silently hiding the real error
             # (molass-gui#7).
             self._stopped = True
-            self._win.after(0, lambda m=short: self._on_launch_failed(m, log_path))
+            self._after(0, lambda m=short: self._on_launch_failed(m, log_path))
 
     def _on_launch_failed(self, short_msg, log_path):
         self._status_var.set(f"Error: {short_msg}  \u2014 see {log_path}")
@@ -802,8 +874,8 @@ class RigorousView:
     def _on_started(self):
         self._action_btn.state(['!disabled'])
         self._status_var.set("Running\u2026")
-        self._win.after(0, self._watch_tick)
-        self._win.after(500, self._ui_poll)
+        self._after(0, self._watch_tick)
+        self._after(500, self._ui_poll)
 
     def _watch_tick(self):
         """Main-thread, self-rescheduling: redraw UV/XR/score panels every ~3 s.
@@ -847,14 +919,14 @@ class RigorousView:
         except Exception:
             pass
         if not self._stopped:
-            self._win.after(3000, self._watch_tick)
+            self._after(3000, self._watch_tick)
 
     def _ui_poll(self):
         """Main-thread: update labels and flush canvas every 500 ms."""
         if self._stopped:
             return
         if self._run_info is None:
-            self._win.after(500, self._ui_poll)
+            self._after(500, self._ui_poll)
             return
         try:
             status      = self._run_info.live_status()
@@ -928,7 +1000,7 @@ class RigorousView:
             self._redraw_event.clear()
             self._canvas.draw()
         if not self._stopped:
-            self._win.after(500, self._ui_poll)
+            self._after(500, self._ui_poll)
 
     def _stop(self):
         self._stopped = True
@@ -947,7 +1019,7 @@ class RigorousView:
                     time.sleep(0.5)
                     if not ri.is_alive:
                         break
-            self._win.after(0, self._on_terminated)
+            self._after(0, self._on_terminated)
         threading.Thread(target=_wait_dead, daemon=True).start()
 
     def _on_terminated(self):
