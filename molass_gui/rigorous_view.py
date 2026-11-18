@@ -22,6 +22,7 @@ from molass_gui.denss_view import show_denss_lazy
 from molass_gui.ranks_dialog import show_set_ranks_lazy
 from molass_gui.window_tree import register_window_cleanup, register_close_guard
 from molass_gui.trimming_info import fmt_fronting
+from molass_gui import busy, fork_dialog, fork_logic
 
 _NUM_JOBS_DEFAULT = 10  # matches upgraded_view.py's New Analysis default
 
@@ -94,6 +95,7 @@ class RigorousView:
         # to whichever result Plot Components/Kratky Shape Match/Run DENSS next
         # (re)loads; not written back to recipe.json.
         self._xr_ranks = None
+        self._fork_dlg = None
 
     @classmethod
     def open_existing(cls, analysis_folder, parent=None, app_root=None, session_tag=None):
@@ -204,6 +206,10 @@ class RigorousView:
                                      command=self._run_denss, state="disabled")
         self._ranks_btn = ttk.Button(hdr, text="Set Ranks\u2026",
                                      command=self._set_ranks, state="disabled")
+        # molass-library#396: a new analysis from the best result, under the same or another model. Only where the
+        # installed molass has it; only in the resumable state (below), once the best result is loaded.
+        self._fork_btn = (ttk.Button(hdr, text="Continue as new analysis\u2026", command=self._fork,
+                                     state="disabled") if fork_dialog.fork_available() else None)
         if self._result_mode:
             self._show_resumable_controls()
         else:
@@ -426,6 +432,8 @@ class RigorousView:
         self._homog_btn.state(["!disabled"])
         self._continuity_btn.state(["!disabled"])
         self._mass_btn.state(["!disabled"])
+        if self._fork_btn is not None:
+            self._fork_btn.state(["!disabled"])
         # self._resume_btn was created already-enabled in show() -- no further
         # action needed here (and no .configure()/.state() call on it, since
         # this runs right after the .configure()-breaking import; see show()).
@@ -447,6 +455,8 @@ class RigorousView:
         self._ranks_btn.pack_forget()
         self._continuity_btn.pack_forget()
         self._mass_btn.pack_forget()
+        if self._fork_btn is not None:
+            self._fork_btn.pack_forget()
         self._action_btn.pack(side=tk.RIGHT, padx=8)
         self._params_btn.pack(side=tk.RIGHT, padx=8)
         self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
@@ -475,6 +485,12 @@ class RigorousView:
         self._resume_btn.pack(side=tk.RIGHT, padx=8)
         self._resume_jobs_spin.pack(side=tk.RIGHT, padx=(0, 4))
         self._resume_jobs_label.pack(side=tk.RIGHT, padx=(8, 0))
+        if self._fork_btn is not None:
+            self._fork_btn.pack(side=tk.RIGHT, padx=8)
+            # a run that has ended (completed, failed, Terminated) has a best result to start from; a result that is
+            # still loading enables it in _on_prep_done_result
+            if self._score is not None:
+                self._fork_btn.state(["!disabled"])
         self._params_btn.pack(side=tk.RIGHT, padx=8)
         self._plotcomp_btn.pack(side=tk.RIGHT, padx=8)
         self._homog_btn.pack(side=tk.RIGHT, padx=8)
@@ -483,6 +499,36 @@ class RigorousView:
         self._shapeanalysis_btn.pack(side=tk.RIGHT, padx=8)
         self._denss_btn.pack(side=tk.RIGHT, padx=8)
         self._ranks_btn.pack(side=tk.RIGHT, padx=8)
+
+    def _fork(self):
+        """Continue as new analysis...: a new folder from the best result of this one (molass-library#396)."""
+        recipe = dict(self._est_kwargs.get('pipeline_recipe') or {})
+        ctx = fork_dialog.ForkContext(self._analysis_folder, self._decomp, self._trimmed, recipe,
+                                      rgcurve=getattr(self._decomp, '_rgcurve', None))
+        try:
+            jobs = int(self._resume_jobs_var.get())
+        except (ValueError, tk.TclError):
+            jobs = _NUM_JOBS_DEFAULT
+        self._fork_dlg = fork_dialog.show_fork_dialog(self._win, self._status_var, ctx, self._start_fork,
+                                                      previous=self._fork_dlg, jobs_default=jobs)
+
+    def _start_fork(self, plan, score, n_jobs, method):
+        """The prepared plan is a new run: its own live window (a child of this one), seeded by the plan.
+        Nothing of this analysis is touched; the new folder is made when the run starts."""
+        recipe = dict(plan.recipe)
+        recipe['method'] = method.lower()
+        est_kwargs = {'pipeline_recipe': recipe, 'num_jobs': n_jobs,
+                      'optimize_extra': fork_logic.optimize_extras(plan)}
+        tag = os.path.basename(os.path.normpath(plan.new_folder))
+        with busy.working(self._win, self._status_var, "Opening the new analysis\u2026"):
+            RigorousView(plan.decomposition, plan.info.trimmed, est_kwargs, analysis_folder=plan.new_folder,
+                         ctx=None, parent=self._win, app_root=self._app_root,
+                         session_tag=tag, score=score).show()
+
+    def _optimize_extras(self):
+        """The arguments a fork adds to ``optimize_rigorously``: the seed, what produced it, the note, ...
+        (``est_kwargs['optimize_extra']``, from :func:`molass_gui.fork_logic.optimize_extras`); none otherwise."""
+        return dict(self._est_kwargs.get('optimize_extra') or {})
 
     def _resume(self):
         # Reset _stopped -- may still be True from a previous terminal state
@@ -683,6 +729,7 @@ class RigorousView:
                     num_jobs=self._num_jobs,
                     on_round_start=_on_round_start,
                     stop_check=lambda: self._stopped,
+                    **self._optimize_extras(),
                 )
             else:
                 run_info = self._decomp_for_opt.optimize_rigorously(
@@ -692,6 +739,7 @@ class RigorousView:
                     method=method,
                     analysis_folder=self._analysis_folder,
                     pipeline_recipe=pipeline_recipe,
+                    **self._optimize_extras(),
                 )
                 _on_round_start(0, 1, run_info)
         except Exception as exc:

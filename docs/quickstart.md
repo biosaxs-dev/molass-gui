@@ -126,6 +126,19 @@ iterations proceed; **Terminate** stops it early if you don't want to wait
 for the full run, and **Resume** restarts a stopped run from where it left
 off.
 
+Once a run has stopped (or when you open an existing analysis), **Continue as
+new analysis…** starts a *new* analysis folder from the best result of this
+one, under the same elution model or another — for example an EGH result
+carried over to GRM. The dialog asks for the model, whether to **start near the
+current curves** (GRM and LKM: the new components are fitted to the curves of
+the result, so that the new model starts close to it instead of from a fresh
+estimate), the new folder, a note, the method and the number of jobs.
+**Prepare** shows what the first job would start from (its score, next to the
+score of the best result of this analysis); **Start** opens the new run in its
+own window. This analysis is not touched, so this is the way to try another
+model without disturbing a finished run. In a notebook it is
+`molass.fork_analysis(...)`. It needs a molass release that has it.
+
 When it's done, use **Run DENSS…** for 3D shape reconstruction (its **View…**
 button opens the resulting `.mrc` map in an interactive viewer — rotate the
 isosurface or voxel scatter with the mouse, read the three central slices
