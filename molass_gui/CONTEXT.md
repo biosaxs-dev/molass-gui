@@ -6,6 +6,9 @@ so it is current for whatever version you have.
 Find this file's absolute path at runtime: `python -c "import molass_gui; print(molass_gui.context_path())"`
 (or `molass_gui.print_context()` to dump it directly).
 
+`CHANGELOG.md` sits next to this file: per version, what changed in behavior, what was added, and which `molass` /
+`molass_legacy` versions it requires.
+
 **Read [`molass`'s `CONTEXT.md`](https://github.com/biosaxs-dev/molass-library/blob/main/molass/CONTEXT.md)
 first** for the underlying SEC-SAXS analysis pipeline (`SecSaxsData` →
 `trimmed_copy` → `quick_decomposition` → `optimize_rigorously`) — this GUI is
