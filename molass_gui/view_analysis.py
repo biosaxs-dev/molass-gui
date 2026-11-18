@@ -28,19 +28,20 @@ class ViewAnalysisView:
         f = ttk.Frame(self._win, padding=16)
         f.pack(fill=tk.BOTH, expand=True)
 
+        recent = recent_folders.load(kind="analysis")
+        width = recent_folders.picker_width(recent)
         ttk.Label(f, text="Analysis folder:").grid(row=0, column=0, sticky=tk.W, pady=4)
         self._folder_var = tk.StringVar(value="")
-        ttk.Entry(f, textvariable=self._folder_var, width=52).grid(
+        ttk.Entry(f, textvariable=self._folder_var, width=width).grid(
             row=0, column=1, padx=6)
         ttk.Button(f, text="Browse…", command=self._browse).grid(row=0, column=2)
 
-        recent = recent_folders.load(kind="analysis")
         if recent:
             ttk.Label(f, text="Recent:").grid(row=1, column=0, sticky=tk.W, pady=4)
             self._recent_var = tk.StringVar(value="(custom folder)")
             ttk.Combobox(f, textvariable=self._recent_var,
                         values=["(custom folder)"] + recent,
-                        state="readonly", width=52).grid(
+                        state="readonly", width=width).grid(
                 row=1, column=1, columnspan=2, sticky=tk.W, padx=6)
             self._recent_var.trace_add('write', self._on_recent_change)
 

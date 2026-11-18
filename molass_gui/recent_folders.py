@@ -12,6 +12,18 @@ from pathlib import Path
 _MAX_ENTRIES = 10
 _STATE_DIR = Path.home() / ".molass-gui"
 
+# the folder box and the Recent list are as wide as the longest recent path (a list is no wider than its box:
+# paths cut off at the end cannot be told apart), within these limits (in characters)
+MIN_WIDTH = 52
+MAX_WIDTH = 100
+
+
+def picker_width(paths, minimum=MIN_WIDTH, maximum=MAX_WIDTH):
+    """Width in characters for the folder entry and the Recent combobox: the longest path plus a margin (the
+    default font is proportional, so a path of n characters can need more than n), kept within the limits."""
+    longest = max((len(p) for p in paths), default=0)
+    return max(minimum, min(maximum, longest + 6))
+
 
 def _state_path(kind):
     suffix = "" if kind == "data" else f"_{kind}"
