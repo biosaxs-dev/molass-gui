@@ -135,6 +135,9 @@ def build_notebook(ctx):
                         if getattr(ctx, 'proportions_source', None) else "")
         ranks_line = (f"decomp.update_xr_ranks({ctx.xr_ranks})\n"
                      if getattr(ctx, 'xr_ranks', None) is not None else "")
+        if ranks_line and 2 in ctx.xr_ranks and getattr(ctx, 'rank2_method', None):
+            # --develop: the rank-2 method the user chose in the GUI (molass-gui#29); the library default needs no line
+            ranks_line += f"decomp.set_rank2_method({ctx.rank2_method!r})\n"
         # rgcurve lives in its own cell, computed on `corrected` rather than
         # `decomp` -- retrying quick_decomposition with different
         # num_components/proportions (the most common notebook edit) then

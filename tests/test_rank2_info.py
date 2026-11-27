@@ -157,3 +157,59 @@ def test_the_report_button_sits_with_the_summary_and_opens_the_text_with_a_worki
 
 def test_the_report_text_is_empty_without_a_report():
     assert rank2_report_dialog.report_text(None) == "" and rank2_report_dialog.report_text({}) == ""
+
+
+class MethodDecomp(ReportDecomp):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.methods = []
+
+    def set_rank2_method(self, method):
+        self.methods.append(method)
+
+
+def _method_boxes(view):
+    return [w for w in view._rank2_row.winfo_children() if w.winfo_class() == "TCombobox"]
+
+
+def test_the_method_choice_is_hidden_unless_develop_and_a_molass_that_has_it(root, monkeypatch):
+    from molass_gui import feature_flags
+    monkeypatch.setattr(feature_flags, "DEVELOP_MODE_ENABLED", False)
+    assert _method_boxes(_view(root, MethodDecomp({0: entry()}))) == []
+    monkeypatch.setattr(feature_flags, "DEVELOP_MODE_ENABLED", True)
+    assert _method_boxes(_view(root, ReportDecomp({0: entry()}))) == []        # a molass without set_rank2_method
+    assert len(_method_boxes(_view(root, MethodDecomp({0: entry()})))) == 1
+
+
+def test_choosing_the_bounded_method_sets_it_applies_the_ranks_again_and_is_kept_in_the_context(root, monkeypatch):
+    from molass_gui import feature_flags
+    monkeypatch.setattr(feature_flags, "DEVELOP_MODE_ENABLED", True)
+    decomp = MethodDecomp({0: entry([finding()])})
+    view = _view(root, decomp)
+    view._ranks_var.set("1,2")
+    view._apply_ranks()
+    assert view._rank2_method_var.get() == "soft-bounded" and view._ctx.rank2_method is None
+    decomp.ranks_set = []
+    view._rank2_method_var.set("bounded (clip)")
+    view._on_rank2_method_change()
+    assert decomp.methods == ["bounded"] and view._ctx.rank2_method == "bounded" and decomp.xr_ranks == [1, 2]
+    assert view._rank2_line_var.get().startswith("Ranks = 2:")                   # the plots, summary and notices were made again
+    view._rank2_method_var.set("soft-bounded")
+    view._on_rank2_method_change()
+    assert decomp.methods == ["bounded", "soft_bounded"] and view._ctx.rank2_method is None
+
+
+def test_the_chosen_method_is_exported_only_with_a_rank2_component():
+    import molass_data
+    from molass_gui.notebook_export import build_notebook
+    ctx = SessionContext(molass_data.SAMPLE1)
+    ctx.num_components = 3
+    source = lambda: "\n".join(c.source for c in build_notebook(ctx).cells if c.cell_type == "code")
+    ctx.xr_ranks, ctx.rank2_method = [1, 2, 1], None
+    assert "\ndecomp.set_rank2_method(" not in source()                                   # the library default needs no line
+    ctx.rank2_method = "bounded"
+    assert "decomp.update_xr_ranks([1, 2, 1])\ndecomp.set_rank2_method('bounded')\n" in source()
+    ctx.xr_ranks = [1, 1, 1]
+    assert "\ndecomp.set_rank2_method(" not in source()
+    ctx.forget_decomposition()
+    assert ctx.rank2_method is None

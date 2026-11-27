@@ -22,6 +22,8 @@ _MODEL_OPTIONS = [
 _MODEL_LABELS = [m[0] for m in _MODEL_OPTIONS]
 # SDM (lognormal) is immature -- hidden from the combobox unless --develop.
 _IMMATURE_MODEL_LABELS = {'EGH \u2192 SDM (lognormal)'}
+# the rank-2 (interparticle) methods of molass (Decomposition.set_rank2_method), by display label; the first is the library default
+_RANK2_METHOD_LABELS = {'soft_bounded': 'soft-bounded', 'bounded': 'bounded (clip)'}
 
 
 class QuickView:
@@ -155,6 +157,14 @@ class QuickView:
                   justify=tk.LEFT).pack(side=tk.LEFT)
         # the button lives in this row, not in the header: it exists only with a rank-2 component, and the header stays as wide as it was
         ttk.Button(self._rank2_row, text="Rank-2 report\u2026", command=self._show_rank2_report).pack(side=tk.LEFT, padx=8)
+        # --develop only: the soft-bounded LRF is the default and the validated one; the Bounded LRF (hard clip) is for comparison (molass-gui#29)
+        self._rank2_method_var = tk.StringVar(value=_RANK2_METHOD_LABELS[getattr(self._ctx, 'rank2_method', None) or 'soft_bounded'])
+        if feature_flags.DEVELOP_MODE_ENABLED and hasattr(self._decomp, 'set_rank2_method'):
+            ttk.Label(self._rank2_row, text="Method:").pack(side=tk.LEFT, padx=(8, 0))
+            method_cb = ttk.Combobox(self._rank2_row, textvariable=self._rank2_method_var, values=list(_RANK2_METHOD_LABELS.values()),
+                                     state='readonly', width=13)
+            method_cb.pack(side=tk.LEFT, padx=4)
+            method_cb.bind('<<ComboboxSelected>>', lambda _e: self._on_rank2_method_change())
 
         # Show EGH plot_components immediately; Rg curve overlay follows once ready.
         # Attach to the computation NaiveView._detect_worker already kicked off (far
@@ -249,6 +259,14 @@ class QuickView:
         self._rank2_line_var.set(rank2_info.fmt_rank2_summary(report))
         self._rank2_report_text = rank2_report_dialog.report_text(report)
         self._place_rank2_rows()
+
+    def _on_rank2_method_change(self):
+        """The method of the rank-2 correction was chosen (--develop): set it on the decomposition and apply the ranks again, so the plots,
+        the summary, the notices and the report are those of the chosen method. Like the ranks, the choice is not written to recipe.json."""
+        method = next(key for key, label in _RANK2_METHOD_LABELS.items() if label == self._rank2_method_var.get())
+        self._decomp.set_rank2_method(method)
+        self._ctx.rank2_method = None if method == 'soft_bounded' else method       # None = the library default
+        self._apply_ranks()
 
     def _show_rank2_report(self):
         from molass_gui.homogeneity_dialog import _heading

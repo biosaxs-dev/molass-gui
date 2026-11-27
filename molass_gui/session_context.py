@@ -101,6 +101,7 @@ class SessionContext:
         self.analysis_folder = None
         self.num_jobs = None  # successive reseeded jobs (molass-researcher experiment 36)
         self.xr_ranks = None  # set via QuickView's Ranks entry (Decomposition.update_xr_ranks)
+        self.rank2_method = None  # --develop: 'bounded' when chosen in the Quick View (Decomposition.set_rank2_method); None = the library default (soft-bounded)
 
     def forget_decomposition(self):
         """The Quick Optimization View was left for the Naive View: what the decomposition and the views after
@@ -113,6 +114,7 @@ class SessionContext:
         self.constraint_weight = None
         self.model_info = None
         self.xr_ranks = None
+        self.rank2_method = None
     @property
     def sample_ref(self):
         """``(package, name)`` (e.g. ``('molass_data', 'SAMPLE1')``) if self.folder is a bundled sample

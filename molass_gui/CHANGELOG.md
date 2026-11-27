@@ -23,6 +23,11 @@ Headings: **Changed (behavior)**, **Added**, **Requires**.
   the earlier ranks in place and says why in the status line, instead of an unhandled error.
 
 ### Added
+- **`--develop`: choose the rank-2 method in the Quick View** (#29): a "Method: soft-bounded | bounded (clip)" box in the row of the rank-2 summary (after the ranks
+  were applied with a rank-2 component) calls `decomp.set_rank2_method(...)` and applies the ranks again, so the plots, the summary, the notices and the report are
+  those of the chosen method. The soft-bounded LRF is the default and the validated one; the Bounded LRF is for comparison. The choice is kept in the session
+  context (`rank2_method`, reset by Naive View, not written to recipe.json) and the exported notebook writes `decomp.set_rank2_method('bounded')` after the ranks.
+  Hidden without `--develop` or with a `molass` that has no `set_rank2_method`.
 - **The exported notebook shows what the rank-2 correction did** (#28): when the Ranks contain 2, a cell right after the one that applies them prints
   `decomp.rank2_report()` (guarded for a `molass` without it), with a note on `set_rank2_method('bounded')`. Without a rank-2 component the export is unchanged.
 - **Rank-2 report...** button in the Quick View (#27), in the row of the rank-2 summary (it exists only with a rank-2 component, and the header keeps its
