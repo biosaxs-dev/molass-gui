@@ -79,6 +79,29 @@ def test_export_has_the_mass_cell_with_its_caveat_after_the_decomposition():
     assert not any("get_volume_mass" in c.source for c in build_notebook(ctx).cells)
 
 
+def test_export_has_the_rank2_report_cell_only_with_a_rank2_component():
+    ctx = SessionContext(molass_data.SAMPLE1)
+    ctx.num_components = 3
+    sources = lambda: [c.source for c in build_notebook(ctx).cells if c.cell_type == "code"]
+    assert not any("rank2_report" in s for s in sources())               # unchanged without ranks
+    ctx.xr_ranks = [1, 1, 1]
+    assert not any("rank2_report" in s for s in sources())
+    ctx.xr_ranks = [1, 2, 1]
+    codes = sources()
+    i = next(i for i, c in enumerate(codes) if "update_xr_ranks([1, 2, 1])" in c)
+    report = codes[i + 1]                                                # right after the cell that applies the ranks
+    assert "print(decomp.rank2_report())" in report and "hasattr(decomp, 'rank2_report')" in report
+    compile(report, "<report cell>", "exec")
+
+
+def test_the_rank2_report_cell_runs_and_prints_the_report_or_says_why_not(capsys):
+    from molass_gui.notebook_export import rank2_report_source
+    exec(rank2_report_source(), {"decomp": type("D", (), {"rank2_report": lambda self: "REPORT"})()})
+    assert "REPORT" in capsys.readouterr().out
+    exec(rank2_report_source(), {"decomp": object()})
+    assert "no rank2_report()" in capsys.readouterr().out
+
+
 @pytest.fixture
 def anomaly_handling_off():
     from molass.Global.Options import get_molass_options, set_molass_options

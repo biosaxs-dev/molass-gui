@@ -36,6 +36,20 @@ def _upgrade_call(model_info, target_var):
     return f"{target_var} = decomp.upgrade({model_key!r}{kwargs})"
 
 
+def rank2_report_source():
+    """The cell that shows what the rank-2 (interparticle) correction did (molass-gui#28): the library's report, with the Rg of the corrected and
+    the uncorrected profile under two Guinier conventions and the findings. Guarded, because the notebook may be run with a molass that has no
+    ``rank2_report`` (before molass-library#420)."""
+    return (
+        "# The interparticle (rank-2) correction: what it did, as in the GUI's 'Rank-2 report...'\n"
+        "# (the soft-bounded LRF is the default; decomp.set_rank2_method('bounded') gives the hard clip, then decomp.rank2_report() again)\n"
+        "if hasattr(decomp, 'rank2_report'):\n"
+        "    print(decomp.rank2_report())\n"
+        "else:\n"
+        "    print('this molass has no rank2_report(); upgrade molass to see what the rank-2 correction did')"
+    )
+
+
 def _anomaly_handling_off_source():
     """Source switching molass's anomaly handling off, or "" when it is on.
 
@@ -136,6 +150,8 @@ def build_notebook(ctx):
             f"{ranks_line}"
             "decomp.plot_components(rgcurve=rgcurve)"
         ))
+        if 2 in (getattr(ctx, 'xr_ranks', None) or []):
+            cells.append(_code(rank2_report_source()))
 
     # active_var tracks the object downstream cells (score, optimize_rigorously)
     # should act on -- the upgraded decomposition when a model upgrade ran,

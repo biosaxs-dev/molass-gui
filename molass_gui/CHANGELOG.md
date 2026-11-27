@@ -23,6 +23,8 @@ Headings: **Changed (behavior)**, **Added**, **Requires**.
   the earlier ranks in place and says why in the status line, instead of an unhandled error.
 
 ### Added
+- **The exported notebook shows what the rank-2 correction did** (#28): when the Ranks contain 2, a cell right after the one that applies them prints
+  `decomp.rank2_report()` (guarded for a `molass` without it), with a note on `set_rank2_method('bounded')`. Without a rank-2 component the export is unchanged.
 - **Rank-2 report...** button in the Quick View (#27), in the row of the rank-2 summary (it exists only with a rank-2 component, and the header keeps its
   width): opens `decomposition.rank2_report()` as read-only monospace text with **Copy to Clipboard**, to paste into a status record or a mail. It is the
   report computed when the ranks were applied; nothing can be edited (it shows what the data support, it is not a tuning panel).
