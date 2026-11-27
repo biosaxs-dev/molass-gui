@@ -10,7 +10,8 @@ Headings: **Changed (behavior)**, **Added**, **Requires**.
 ## Unreleased
 
 ### Changed (behavior)
-- **Applying Ranks = 2 in the Quick View leads with the impact** (#26): the status line says how much the correction changes the Rg
+- **Applying Ranks = 2 in the Quick View leads with the impact** (#26): a row of its own under the header (not the header's status line, where it widened the
+  window) says how much the correction changes the Rg
   (`Ranks = 2: Rg 35.2 -> 34.2 A (-2.8 %, adaptive fit); 30.3 -> 33.4 A (+10.4 %, from the lowest q) | 2 checks flagged (see the notice)`), from
   `decomposition.rank2_report()`. With a `molass` that has the findings (biosaxs-dev/molass-library#423) the notice bar lists each check in plain
   language, what it affects and what to check, with the library's own text under it; it says that a finding is not a risk level (the thresholds are

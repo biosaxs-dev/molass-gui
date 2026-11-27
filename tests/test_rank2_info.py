@@ -48,9 +48,9 @@ def test_a_component_that_was_not_corrected_says_so():
 def test_the_notices_carry_the_plain_text_what_it_affects_what_to_check_and_the_library_text():
     caught = [f"Soft-bounded LRF, component 0: {LIBRARY_TEXT} (see decomposition.soft_bounded_info)", "an unrelated warning"]
     out = rank2_info.build_rank2_notices(caught, {0: entry([finding()])})
-    assert out[0].startswith("1 check of the interparticle (rank-2) correction flagged") and "not a risk level" in out[0]
+    assert out[0].startswith("1 check of the interparticle (rank-2) correction flagged") and len(out[0]) < 120
     assert out[1].startswith("At mid q the data show") and "Affects: mid q, 0.0707-0.106 1/A." in out[1] and "Check: Compare the Rg" in out[1] and LIBRARY_TEXT in out[1]
-    assert out[2:] == ["an unrelated warning"]                          # the warning the finding covers is not repeated
+    assert out[2:] == ["an unrelated warning", rank2_info.NOT_A_RISK_LEVEL]       # the warning the finding covers is not repeated; the note ends the list
 
 
 def test_without_findings_the_generic_notices_stay():
@@ -108,12 +108,13 @@ def test_apply_puts_the_summary_in_the_status_line_and_the_findings_in_the_notic
     view = _view(root, ReportDecomp({0: entry([finding()])}))
     view._ranks_var.set("1,2")
     view._apply_ranks()
-    assert view._status_var.get().startswith("Ranks = 2: Rg 35.2 -> 34.2 A") and "1 check flagged" in view._status_var.get()
+    assert view._rank2_line_var.get().startswith("Ranks = 2: Rg 35.2 -> 34.2 A") and "1 check flagged" in view._rank2_line_var.get()
+    assert view._status_var.get() == "" and view._rank2_row.winfo_manager() == "pack"          # a row of its own, not the header
     notices_now = view._notice_bar.notices
-    assert notices_now[0].startswith("1 check of the interparticle") and "Check: Compare the Rg" in notices_now[1] and len(notices_now) == 2
+    assert notices_now[0].startswith("1 check of the interparticle") and "Check: Compare the Rg" in notices_now[1] and notices_now[-1] == rank2_info.NOT_A_RISK_LEVEL and len(notices_now) == 3
     view._ranks_var.set("1,1")                                         # no rank-2 component: nothing left of it
     view._apply_ranks()
-    assert view._status_var.get() == "" and view._notice_bar.notices == []
+    assert view._rank2_line_var.get() == "" and view._rank2_row.winfo_manager() == "" and view._notice_bar.notices == []
 
 
 @pytest.mark.parametrize("decomp_class, kwargs", [(ReportDecomp, dict(fails=True)), (OldDecomp, {})])

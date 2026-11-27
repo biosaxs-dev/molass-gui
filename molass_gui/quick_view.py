@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from molass_gui import busy, feature_flags, notices, rank2_info
+from molass_gui.dpi import px
 from molass_gui.model_names import model_display_name
 from molass_gui.plot_embed import embed_plot, export_component_data
 from molass_gui.rgcurve_worker import start_rgcurve_worker, attach_rgcurve_worker, rgcurve_n_frames
@@ -146,6 +147,12 @@ class QuickView:
 
         self._notice_bar = notices.NoticeBar(win, self._notices)
 
+        # the rank-2 summary has a row of its own under the header (molass-gui#26): in the header it set the width of the window
+        self._rank2_line_var = tk.StringVar(value="")
+        self._rank2_row = ttk.Frame(win, padding=(8, 1))
+        ttk.Label(self._rank2_row, textvariable=self._rank2_line_var, foreground="gray", wraplength=px(1000),
+                  justify=tk.LEFT).pack(side=tk.LEFT)
+
         # Show EGH plot_components immediately; Rg curve overlay follows once ready.
         # Attach to the computation NaiveView._detect_worker already kicked off (far
         # earlier -- right after corrected_copy()) rather than starting a new one here.
@@ -236,7 +243,18 @@ class QuickView:
         self._rank2_notices = rank2_info.build_rank2_notices(caught, report)
         self._notice_bar.update(self._notices + self._rank2_notices, after=self._hdr)
         # the impact first: how much the correction changes the Rg, then how many checks were flagged (molass-gui#26)
-        self._status_var.set(rank2_info.fmt_rank2_summary(report))
+        self._rank2_line_var.set(rank2_info.fmt_rank2_summary(report))
+        self._place_rank2_rows()
+
+    def _place_rank2_rows(self):
+        """Header, then the summary row (when there is a summary), then the notice bar."""
+        self._rank2_row.pack_forget()
+        if self._rank2_line_var.get():
+            self._rank2_row.pack(fill=tk.X, after=self._hdr)
+        frame = self._notice_bar.frame
+        if frame is not None:
+            frame.pack_forget()
+            frame.pack(fill=tk.X, after=self._rank2_row if self._rank2_line_var.get() else self._hdr)
 
     def _rank2_report(self, ranks):
         """``decomposition.rank2_report()`` for the summary, or None: no rank-2 component, an older ``molass`` without it, or a report that fails

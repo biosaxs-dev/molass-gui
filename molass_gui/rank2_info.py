@@ -7,6 +7,8 @@ no ``impact``, no ``findings``).
 """
 from molass_gui import notices
 
+NOT_A_RISK_LEVEL = "Note: a flagged check is not a risk level; the thresholds behind it are provisional."
+
 
 def _short(convention):
     return "adaptive fit" if convention.startswith("adaptive") else "from the lowest q" if convention.startswith("from lowest") else convention
@@ -57,10 +59,10 @@ def build_rank2_notices(caught, report=None):
         return notices.rank2_notices(caught)
     many = len(report) > 1
     covered = [f.text for _, f in found]
-    out = [f"{len(found)} check{'s' if len(found) != 1 else ''} of the interparticle (rank-2) correction flagged; Details says what each means and what to check "
-           f"(not a risk level: the thresholds are provisional)."]
+    out = [f"{len(found)} check{'s' if len(found) != 1 else ''} of the interparticle (rank-2) correction flagged. Details: what each means and what to check."]
     for k, f in found:
         who = f"Component {k + 1}: " if many else ""
         out.append(f"{who}{f.plain}\nAffects: {f.region}.\nCheck: {f.check}\n(molass: {f.text})")
     out.extend(m for m in dict.fromkeys(caught) if m and not any(t in m for t in covered))
+    out.append(NOT_A_RISK_LEVEL)
     return out
