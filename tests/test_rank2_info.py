@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from molass_gui import quick_view, rank2_info
+from molass_gui import quick_view, rank2_info, rank2_report_dialog
 from molass_gui.session_context import SessionContext
 
 LIBRARY_TEXT = "B/A exceeds twice the hard-core envelope significantly at 65% of the points in the band 0.0707 <= q < 0.106: adhesive or soft particles?"
@@ -124,3 +124,36 @@ def test_a_failing_or_missing_report_never_breaks_applying_the_ranks(root, decom
     view._apply_ranks()
     assert view._ctx.xr_ranks == [1, 2] and view._status_var.get() == ""
     assert view._notice_bar.notices[0].startswith("The interparticle (rank-2) correction")       # the generic notice
+
+
+class ReprReport(dict):
+    def __repr__(self):
+        return "component 0: soft_bounded\n  bound: K = 0.355"
+
+
+def test_the_report_button_sits_with_the_summary_and_opens_the_text_with_a_working_copy(root):
+    view = _view(root, ReportDecomp(ReprReport({0: entry([finding()])})))
+    view._ranks_var.set("1,2")
+    view._apply_ranks()
+    assert view._rank2_row.winfo_manager() == "pack"                  # the button exists with the summary row only: the header keeps its width
+    buttons = [w for w in view._rank2_row.winfo_children() if w.winfo_class() == "TButton"]
+    assert [b.cget("text") for b in buttons] == ["Rank-2 report\u2026"]
+    opened = []
+    real = rank2_report_dialog.show_rank2_report
+    rank2_report_dialog.show_rank2_report = lambda win, text, heading=None: opened.append(real(win, text, heading))
+    try:
+        buttons[0].invoke()
+    finally:
+        rank2_report_dialog.show_rank2_report = real
+    dlg = opened[0]
+    assert dlg.title() == "Rank-2 report" and dlg.text_widget.get("1.0", "end-1c") == "component 0: soft_bounded\n  bound: K = 0.355"
+    assert str(dlg.text_widget.cget("state")) == "disabled"
+    dlg.copy()
+    assert dlg.clipboard_get() == "component 0: soft_bounded\n  bound: K = 0.355"
+    view._ranks_var.set("1,1")                                         # without a rank-2 component the button goes with the row
+    view._apply_ranks()
+    assert view._rank2_row.winfo_manager() == "" and view._rank2_report_text == ""
+
+
+def test_the_report_text_is_empty_without_a_report():
+    assert rank2_report_dialog.report_text(None) == "" and rank2_report_dialog.report_text({}) == ""

@@ -22,6 +22,11 @@ Headings: **Changed (behavior)**, **Added**, **Requires**.
   A rank-2 component without the stated error (a `ValueError` of `molass` naming the cause, biosaxs-dev/molass-library#421) leaves
   the earlier ranks in place and says why in the status line, instead of an unhandled error.
 
+### Added
+- **Rank-2 report...** button in the Quick View (#27), in the row of the rank-2 summary (it exists only with a rank-2 component, and the header keeps its
+  width): opens `decomposition.rank2_report()` as read-only monospace text with **Copy to Clipboard**, to paste into a status record or a mail. It is the
+  report computed when the ranks were applied; nothing can be edited (it shows what the data support, it is not a tuning panel).
+
 ## 0.7.0 (2026-11-18)
 
 Headline: **Continue as new analysis...** starts a new analysis from the best result under the same or another elution model,

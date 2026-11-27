@@ -3,7 +3,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from molass_gui import busy, feature_flags, notices, rank2_info
+from molass_gui import busy, feature_flags, notices, rank2_info, rank2_report_dialog
 from molass_gui.dpi import px
 from molass_gui.model_names import model_display_name
 from molass_gui.plot_embed import embed_plot, export_component_data
@@ -149,9 +149,12 @@ class QuickView:
 
         # the rank-2 summary has a row of its own under the header (molass-gui#26): in the header it set the width of the window
         self._rank2_line_var = tk.StringVar(value="")
+        self._rank2_report_text = ""
         self._rank2_row = ttk.Frame(win, padding=(8, 1))
         ttk.Label(self._rank2_row, textvariable=self._rank2_line_var, foreground="gray", wraplength=px(1000),
                   justify=tk.LEFT).pack(side=tk.LEFT)
+        # the button lives in this row, not in the header: it exists only with a rank-2 component, and the header stays as wide as it was
+        ttk.Button(self._rank2_row, text="Rank-2 report\u2026", command=self._show_rank2_report).pack(side=tk.LEFT, padx=8)
 
         # Show EGH plot_components immediately; Rg curve overlay follows once ready.
         # Attach to the computation NaiveView._detect_worker already kicked off (far
@@ -244,7 +247,13 @@ class QuickView:
         self._notice_bar.update(self._notices + self._rank2_notices, after=self._hdr)
         # the impact first: how much the correction changes the Rg, then how many checks were flagged (molass-gui#26)
         self._rank2_line_var.set(rank2_info.fmt_rank2_summary(report))
+        self._rank2_report_text = rank2_report_dialog.report_text(report)
         self._place_rank2_rows()
+
+    def _show_rank2_report(self):
+        from molass_gui.homogeneity_dialog import _heading
+        if self._rank2_report_text:
+            rank2_report_dialog.show_rank2_report(self._win, self._rank2_report_text, heading=_heading(self._decomp))
 
     def _place_rank2_rows(self):
         """Header, then the summary row (when there is a summary), then the notice bar."""
