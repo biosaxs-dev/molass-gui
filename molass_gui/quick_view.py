@@ -3,7 +3,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from molass_gui import busy, feature_flags, notices
+from molass_gui import busy, feature_flags, notices, rank2_info
 from molass_gui.model_names import model_display_name
 from molass_gui.plot_embed import embed_plot, export_component_data
 from molass_gui.rgcurve_worker import start_rgcurve_worker, attach_rgcurve_worker, rgcurve_n_frames
@@ -219,11 +219,13 @@ class QuickView:
         # component without the stated error (a ValueError naming the cause, molass-library#421) leaves the earlier ranks in place.
         previous = list(getattr(self._decomp, 'xr_ranks', None) or [1] * nc)
         caught = []
+        report = None
         try:
             with busy.working(self._win, self._status_var, "Applying the ranks\u2026", buttons=[self._apply_btn]):
                 with notices.capture() as caught:
                     self._decomp.update_xr_ranks(ranks)
                     self._redraw()
+                report = self._rank2_report(ranks)
         except ValueError as exc:
             with notices.capture():
                 self._decomp.update_xr_ranks(previous)
@@ -231,8 +233,20 @@ class QuickView:
             self._status_var.set(f"Ranks not applied: {exc}")
             return
         self._ctx.xr_ranks = ranks
-        self._rank2_notices = notices.rank2_notices(caught)
+        self._rank2_notices = rank2_info.build_rank2_notices(caught, report)
         self._notice_bar.update(self._notices + self._rank2_notices, after=self._hdr)
+        # the impact first: how much the correction changes the Rg, then how many checks were flagged (molass-gui#26)
+        self._status_var.set(rank2_info.fmt_rank2_summary(report))
+
+    def _rank2_report(self, ranks):
+        """``decomposition.rank2_report()`` for the summary, or None: no rank-2 component, an older ``molass`` without it, or a report that fails
+        (the summary is an extra; it never breaks applying the ranks)."""
+        if 2 not in ranks or not hasattr(self._decomp, 'rank2_report'):
+            return None
+        try:
+            return self._decomp.rank2_report() or None
+        except Exception:
+            return None
 
     def _on_rgcurve_ready(self, rgcurve):
         self._rgcurve = rgcurve
