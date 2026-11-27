@@ -12,10 +12,10 @@ def report_text(report):
     return repr(report) if report else ""
 
 
-def show_rank2_report(win, text, heading=None):
+def show_rank2_report(win, text, heading=None, title="Rank-2 report"):
     """Open the dialog with *text*; returns the Toplevel."""
     dlg = tk.Toplevel(win)
-    dlg.title("Rank-2 report")
+    dlg.title(title)
     dlg.geometry(geometry(900, 520))
     dlg.transient(win)
 

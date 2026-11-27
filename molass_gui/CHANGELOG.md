@@ -23,6 +23,10 @@ Headings: **Changed (behavior)**, **Added**, **Requires**.
   the earlier ranks in place and says why in the status line, instead of an unhandled error.
 
 ### Added
+- **"Second direction…" button in the Quick View** (#30): in the row under the header, shown from the start for a single component when the installed molass has
+  `Decomposition.second_direction_report()` (molass-library#417). It opens the report (SNR, baseline direction, the time-side indicators against the reference
+  ranges) in the read-only dialog with Copy; it is evidence for telling an interparticle c² term from a second species, not a verdict. The row is now always
+  present when the button is, and the rank-2 summary, report button and method box wait inside it for a rank-2 component. One component only: `frames=` is not offered.
 - **`--develop`: choose the rank-2 method in the Quick View** (#29): a "Method: soft-bounded | bounded (clip)" box in the row of the rank-2 summary (after the ranks
   were applied with a rank-2 component) calls `decomp.set_rank2_method(...)` and applies the ranks again, so the plots, the summary, the notices and the report are
   those of the chosen method. The soft-bounded LRF is the default and the validated one; the Bounded LRF is for comparison. The choice is kept in the session

@@ -149,22 +149,31 @@ class QuickView:
 
         self._notice_bar = notices.NoticeBar(win, self._notices)
 
-        # the rank-2 summary has a row of its own under the header (molass-gui#26): in the header it set the width of the window
+        # the rank row under the header (molass-gui#26, #27, #29, #30): the second-direction button (always, for one component), then the rank-2 summary and, with a rank-2
+        # component, the report button and (--develop) the method box. Everything here would set the width of the window if it were in the header.
         self._rank2_line_var = tk.StringVar(value="")
         self._rank2_report_text = ""
         self._rank2_row = ttk.Frame(win, padding=(8, 1))
+        self._second_dir_available = hasattr(self._decomp, 'second_direction_report') and self._decomp.get_num_components() == 1
+        self._second_dir_btn = ttk.Button(self._rank2_row, text="Second direction\u2026", command=self._show_second_direction)
+        if self._second_dir_available:
+            self._second_dir_btn.pack(side=tk.LEFT, padx=(0, 8))
         ttk.Label(self._rank2_row, textvariable=self._rank2_line_var, foreground="gray", wraplength=px(1000),
                   justify=tk.LEFT).pack(side=tk.LEFT)
-        # the button lives in this row, not in the header: it exists only with a rank-2 component, and the header stays as wide as it was
-        ttk.Button(self._rank2_row, text="Rank-2 report\u2026", command=self._show_rank2_report).pack(side=tk.LEFT, padx=8)
+        # shown only with a rank-2 component
+        self._rank2_tools = ttk.Frame(self._rank2_row)
+        self._rank2_report_btn = ttk.Button(self._rank2_tools, text="Rank-2 report\u2026", command=self._show_rank2_report)
+        self._rank2_report_btn.pack(side=tk.LEFT, padx=8)
         # --develop only: the soft-bounded LRF is the default and the validated one; the Bounded LRF (hard clip) is for comparison (molass-gui#29)
         self._rank2_method_var = tk.StringVar(value=_RANK2_METHOD_LABELS[getattr(self._ctx, 'rank2_method', None) or 'soft_bounded'])
         if feature_flags.DEVELOP_MODE_ENABLED and hasattr(self._decomp, 'set_rank2_method'):
-            ttk.Label(self._rank2_row, text="Method:").pack(side=tk.LEFT, padx=(8, 0))
-            method_cb = ttk.Combobox(self._rank2_row, textvariable=self._rank2_method_var, values=list(_RANK2_METHOD_LABELS.values()),
+            ttk.Label(self._rank2_tools, text="Method:").pack(side=tk.LEFT, padx=(8, 0))
+            method_cb = ttk.Combobox(self._rank2_tools, textvariable=self._rank2_method_var, values=list(_RANK2_METHOD_LABELS.values()),
                                      state='readonly', width=13)
             method_cb.pack(side=tk.LEFT, padx=4)
             method_cb.bind('<<ComboboxSelected>>', lambda _e: self._on_rank2_method_change())
+        self._win = win
+        self._place_rank2_rows()
 
         # Show EGH plot_components immediately; Rg curve overlay follows once ready.
         # Attach to the computation NaiveView._detect_worker already kicked off (far
@@ -273,15 +282,33 @@ class QuickView:
         if self._rank2_report_text:
             rank2_report_dialog.show_rank2_report(self._win, self._rank2_report_text, heading=_heading(self._decomp))
 
+    def _show_second_direction(self):
+        """The second-direction report of the decomposition (molass-library#417): evidence for whether the second direction is a pure c^2 term of one
+        species or another time profile, from the data alone. It does not depend on the ranks."""
+        from molass_gui.error_dialog import show_error_detail
+        from molass_gui.homogeneity_dialog import _heading
+        try:
+            with busy.working(self._win, self._status_var, "Reading the second direction\u2026", buttons=[self._second_dir_btn]):
+                text = repr(self._decomp.second_direction_report())
+        except Exception as exc:
+            show_error_detail(self._win, self._status_var, str(exc) or type(exc).__name__, title="Second direction failed")
+            return
+        rank2_report_dialog.show_rank2_report(self._win, text, heading=_heading(self._decomp), title="Second-direction report")
+
     def _place_rank2_rows(self):
-        """Header, then the summary row (when there is a summary), then the notice bar."""
+        """Header, then the rank row (the second-direction button, or a rank-2 summary), then the notice bar."""
+        has_rank2 = bool(self._rank2_report_text)
+        self._rank2_tools.pack_forget()
+        if has_rank2:
+            self._rank2_tools.pack(side=tk.LEFT)
+        show_row = self._second_dir_available or bool(self._rank2_line_var.get()) or has_rank2
         self._rank2_row.pack_forget()
-        if self._rank2_line_var.get():
+        if show_row:
             self._rank2_row.pack(fill=tk.X, after=self._hdr)
         frame = self._notice_bar.frame
         if frame is not None:
             frame.pack_forget()
-            frame.pack(fill=tk.X, after=self._rank2_row if self._rank2_line_var.get() else self._hdr)
+            frame.pack(fill=tk.X, after=self._rank2_row if show_row else self._hdr)
 
     def _rank2_report(self, ranks):
         """``decomposition.rank2_report()`` for the summary, or None: no rank-2 component, an older ``molass`` without it, or a report that fails

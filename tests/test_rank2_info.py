@@ -135,12 +135,12 @@ def test_the_report_button_sits_with_the_summary_and_opens_the_text_with_a_worki
     view = _view(root, ReportDecomp(ReprReport({0: entry([finding()])})))
     view._ranks_var.set("1,2")
     view._apply_ranks()
-    assert view._rank2_row.winfo_manager() == "pack"                  # the button exists with the summary row only: the header keeps its width
-    buttons = [w for w in view._rank2_row.winfo_children() if w.winfo_class() == "TButton"]
-    assert [b.cget("text") for b in buttons] == ["Rank-2 report\u2026"]
+    assert view._rank2_row.winfo_manager() == "pack" and view._rank2_tools.winfo_manager() == "pack"       # in the rank row: the header keeps its width
+    buttons = [w for w in view._rank2_tools.winfo_children() if w.winfo_class() == "TButton"]
+    assert [b.cget("text") for b in buttons] == ["Rank-2 report\u2026"] and buttons[0] is view._rank2_report_btn
     opened = []
     real = rank2_report_dialog.show_rank2_report
-    rank2_report_dialog.show_rank2_report = lambda win, text, heading=None: opened.append(real(win, text, heading))
+    rank2_report_dialog.show_rank2_report = lambda win, text, heading=None, title="Rank-2 report": opened.append(real(win, text, heading, title))
     try:
         buttons[0].invoke()
     finally:
@@ -152,7 +152,7 @@ def test_the_report_button_sits_with_the_summary_and_opens_the_text_with_a_worki
     assert dlg.clipboard_get() == "component 0: soft_bounded\n  bound: K = 0.355"
     view._ranks_var.set("1,1")                                         # without a rank-2 component the button goes with the row
     view._apply_ranks()
-    assert view._rank2_row.winfo_manager() == "" and view._rank2_report_text == ""
+    assert view._rank2_tools.winfo_manager() == "" and view._rank2_row.winfo_manager() == "" and view._rank2_report_text == ""    # no second direction in this fake: the row goes
 
 
 def test_the_report_text_is_empty_without_a_report():
@@ -169,7 +169,7 @@ class MethodDecomp(ReportDecomp):
 
 
 def _method_boxes(view):
-    return [w for w in view._rank2_row.winfo_children() if w.winfo_class() == "TCombobox"]
+    return [w for w in view._rank2_tools.winfo_children() if w.winfo_class() == "TCombobox"]
 
 
 def test_the_method_choice_is_hidden_unless_develop_and_a_molass_that_has_it(root, monkeypatch):
@@ -213,3 +213,75 @@ def test_the_chosen_method_is_exported_only_with_a_rank2_component():
     assert "\ndecomp.set_rank2_method(" not in source()
     ctx.forget_decomposition()
     assert ctx.rank2_method is None
+
+class SecondDirectionDecomp(ReportDecomp):
+    """A decomposition of a molass that has second_direction_report()."""
+
+    def __init__(self, n=1, text="second direction report (fake)", fails=None):
+        super().__init__(None)
+        self.n, self.text, self.fails, self.calls = n, text, fails, 0
+
+    def get_num_components(self):
+        return self.n
+
+    def second_direction_report(self):
+        self.calls += 1
+        if self.fails:
+            raise ValueError(self.fails)
+        return _TextReport(self.text)
+
+
+class _TextReport:
+    """Like the library's report objects: the text is its repr."""
+
+    def __init__(self, text):
+        self.text = text
+
+    def __repr__(self):
+        return self.text
+
+
+def _open_dialogs(monkeypatch):
+    opened = []
+    real = rank2_report_dialog.show_rank2_report
+    monkeypatch.setattr(rank2_report_dialog, "show_rank2_report", lambda win, text, heading=None, title="Rank-2 report": opened.append(real(win, text, heading, title)))
+    return opened
+
+
+def test_the_second_direction_button_is_in_the_rank_row_from_the_start_for_one_component(root, monkeypatch):
+    view = _view(root, SecondDirectionDecomp())
+    assert view._rank2_row.winfo_manager() == "pack" and view._second_dir_btn.winfo_manager() == "pack"
+    assert view._rank2_tools.winfo_manager() == ""                     # the rank-2 tools wait for a rank-2 component
+    opened = _open_dialogs(monkeypatch)
+    view._second_dir_btn.invoke()
+    assert opened and opened[0].title() == "Second-direction report" and opened[0].text_widget.get("1.0", "end-1c") == "second direction report (fake)"
+    opened[0].copy()
+    assert opened[0].clipboard_get() == "second direction report (fake)"
+
+
+def test_the_second_direction_button_needs_one_component_and_a_molass_that_has_the_report(root):
+    assert _view(root, SecondDirectionDecomp(n=2))._rank2_row.winfo_manager() == ""      # several components: the report is defined for one (frames= is not in this version)
+    assert _view(root, ReportDecomp(None))._rank2_row.winfo_manager() == ""               # an older molass without second_direction_report
+
+
+def test_the_second_direction_button_stays_when_ranks_are_applied_and_does_not_depend_on_them(root, monkeypatch):
+    decomp = SecondDirectionDecomp()
+    view = _view(root, decomp)
+    view._ranks_var.set("1,2")
+    view._apply_ranks()
+    assert view._second_dir_btn.winfo_manager() == "pack"
+    view._ranks_var.set("1,1")
+    view._apply_ranks()
+    assert view._rank2_row.winfo_manager() == "pack" and view._second_dir_btn.winfo_manager() == "pack"       # the row stays without a rank-2 component
+    opened = _open_dialogs(monkeypatch)
+    view._second_dir_btn.invoke()
+    assert decomp.calls == 1 and opened
+
+
+def test_a_failing_second_direction_report_is_shown_not_raised(root, monkeypatch):
+    import molass_gui.error_dialog as error_dialog
+    shown = []
+    monkeypatch.setattr(error_dialog, "show_error_detail", lambda win, status_var, message, title="", prefix="": shown.append((message, title)))
+    view = _view(root, SecondDirectionDecomp(fails="the second-direction report needs the stated error xr.E, which is missing"))
+    view._second_dir_btn.invoke()
+    assert shown and "stated error" in shown[0][0] and shown[0][1] == "Second direction failed"
