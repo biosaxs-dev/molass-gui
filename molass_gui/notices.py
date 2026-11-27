@@ -69,21 +69,42 @@ def details_text(notices):
     return "\n\n".join(f"{i}. {n}" for i, n in enumerate(notices, start=1))
 
 
-class NoticeBar:
-    """A line with the first notice and a Details button, packed under the header; does nothing without notices."""
+def rank2_notices(caught):
+    """The notices of applying Ranks (molass-gui#25): nothing when the library said nothing, else a plain-language first line
+    (the library's texts about the interparticle correction are technical) followed by the library's own texts."""
+    messages = [m for m in dict.fromkeys(caught) if m]
+    if not messages:
+        return []
+    return ["The interparticle (rank-2) correction gave a result that deserves a second look; see Details for what molass says."] + messages
 
-    def __init__(self, win, notices):
-        self.notices = list(notices)
+
+class NoticeBar:
+    """A line with the first notice and a Details button, packed under the header; does nothing without notices.
+    ``update()`` replaces the notices later (a step after the window was opened), packing the bar after ``after``."""
+
+    def __init__(self, win, notices, after=None):
+        self.notices = []
         self._win = win
         self.frame = None
+        self.update(notices, after=after)
+
+    def update(self, notices, after=None):
+        self.notices = list(notices)
         if not self.notices:
+            if self.frame is not None:
+                self.frame.destroy()
+                self.frame = None
             return
-        self.frame = ttk.Frame(win, padding=(8, 2))
-        self.frame.pack(fill=tk.X)
-        self.label = ttk.Label(self.frame, text="\u26a0 " + summary(self.notices), foreground="#b45309",
-                               wraplength=px(1000), justify=tk.LEFT)
-        self.label.pack(side=tk.LEFT)
-        ttk.Button(self.frame, text="Details\u2026", command=self.show_details).pack(side=tk.LEFT, padx=8)
+        if self.frame is None:
+            self.frame = ttk.Frame(self._win, padding=(8, 2))
+            if after is not None:
+                self.frame.pack(fill=tk.X, after=after)
+            else:
+                self.frame.pack(fill=tk.X)
+            self.label = ttk.Label(self.frame, foreground="#b45309", wraplength=px(1000), justify=tk.LEFT)
+            self.label.pack(side=tk.LEFT)
+            ttk.Button(self.frame, text="Details\u2026", command=self.show_details).pack(side=tk.LEFT, padx=8)
+        self.label.configure(text="\u26a0 " + summary(self.notices))
 
     def show_details(self):
         from molass_gui.error_dialog import show_error_detail

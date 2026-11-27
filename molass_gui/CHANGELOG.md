@@ -7,6 +7,15 @@ pipeline; what a menu or button does is a `molass` call, listed in `CONTEXT.md`.
 
 Headings: **Changed (behavior)**, **Added**, **Requires**.
 
+## Unreleased
+
+### Changed (behavior)
+- **Applying Ranks in the Quick View shows what molass says** (#25): the warnings of the rank-2 (interparticle) correction (the concentration
+  refinement ended at a bound, B/A exceeds the hard-core envelope, K is small, ...) go to the notice bar below the header, with a
+  plain-language first line and the library's texts under Details; they go away when the ranks are applied without a rank-2 component.
+  A rank-2 component without the stated error (a `ValueError` of `molass` naming the cause, biosaxs-dev/molass-library#421) leaves
+  the earlier ranks in place and says why in the status line, instead of an unhandled error.
+
 ## 0.7.0 (2026-11-18)
 
 Headline: **Continue as new analysis...** starts a new analysis from the best result under the same or another elution model,

@@ -28,6 +28,7 @@ class QuickView:
                  rgcurve_queue=None, found_notices=(), rgcurve=None, back=None):
         self._decomp = decomp
         self._notices = list(found_notices)   # what molass said when the decomposition was made (molass-gui#19)
+        self._rank2_notices = []              # what molass said when the Ranks were applied (molass-gui#25)
         self._trimmed = trimmed
         self._nc = nc
         self._ctx = ctx
@@ -54,6 +55,7 @@ class QuickView:
         # Header: model selection + PSD σ (conditional) + Upgrade / Skip buttons
         hdr = ttk.Frame(win, padding=(8, 4))
         hdr.pack(fill=tk.X)
+        self._hdr = hdr
 
         self._back_btn = ttk.Button(hdr, text="\u2190 Naive View", command=self._go_back)
         self._back_btn.pack(side=tk.LEFT, padx=(0, 12))
@@ -213,11 +215,24 @@ class QuickView:
             self._status_var.set(f"Ranks must have {nc} value(s), got {len(ranks)}")
             return
         # rank-2 components re-fit synchronously here and can take a moment: the busy signal (hourglass, message,
-        # disabled button) is put on screen first (see busy.py)
-        with busy.working(self._win, self._status_var, "Applying the ranks\u2026", buttons=[self._apply_btn]):
-            self._decomp.update_xr_ranks(ranks)
-            self._ctx.xr_ranks = ranks
-            self._redraw()
+        # disabled button) is put on screen first (see busy.py). What molass says meanwhile goes to the notice bar, and a rank-2
+        # component without the stated error (a ValueError naming the cause, molass-library#421) leaves the earlier ranks in place.
+        previous = list(getattr(self._decomp, 'xr_ranks', None) or [1] * nc)
+        caught = []
+        try:
+            with busy.working(self._win, self._status_var, "Applying the ranks\u2026", buttons=[self._apply_btn]):
+                with notices.capture() as caught:
+                    self._decomp.update_xr_ranks(ranks)
+                    self._redraw()
+        except ValueError as exc:
+            with notices.capture():
+                self._decomp.update_xr_ranks(previous)
+                self._redraw()
+            self._status_var.set(f"Ranks not applied: {exc}")
+            return
+        self._ctx.xr_ranks = ranks
+        self._rank2_notices = notices.rank2_notices(caught)
+        self._notice_bar.update(self._notices + self._rank2_notices, after=self._hdr)
 
     def _on_rgcurve_ready(self, rgcurve):
         self._rgcurve = rgcurve
